@@ -1,0 +1,26 @@
+Package: DSGE
+Type: Package
+Title: Disruption Score of Gene Expression — Pathway-Level
+    Transcriptional Disruption Analysis
+Version: 0.2.0
+Authors@R: person("LHJLab", role = c("aut", "cre"),
+    email = "lihuijuan@xzhmu.edu.cn")
+Description: Converts DESeq2 differential expression p-values into
+    absolute z-scores and tests whether Gene Ontology pathways show
+    significantly stronger transcriptional disruption than expected by
+    chance, using permutation-based null distributions grouped by
+    pathway size with Benjamini-Hochberg FDR correction.
+    Includes utilities for reading GAF 2.2 annotation files and OBO
+    ontology files.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports:
+    data.table,
+    evd,
+    POT
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0
+RoxygenNote: 7.3.3
