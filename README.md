@@ -5,7 +5,8 @@ Pathway-level transcriptional perturbation analysis. Converts DESeq2 p-values in
 ## Installation
 
 ```r
-devtools::install("E:/DSGE")
+# install.packages("devtools")   # if not already installed
+devtools::install_github("LHJLab/DSGE")
 ```
 
 ## Quick Start
