@@ -1,0 +1,23 @@
+Package: DSGE
+Type: Package
+Title: Disruption Score of Gene Expression -- Pathway-Level
+    Transcriptional Disruption Analysis
+Version: 1.1.0
+Authors@R: person("LHJLab", role = c("aut", "cre"),
+    email = "lihuijuan@xzhmu.edu.cn")
+Description: Computes pathway-level transcriptional disruption scores
+    from differential expression p-values using permutation tests with
+    GPD tail extrapolation and FDR correction.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports:
+    data.table,
+    evd,
+    methods,
+    POT
+Suggests:
+    AnnotationDbi,
+    GO.db
+Config/roxygen2/version: 8.0.0
+RoxygenNote: 7.3.3

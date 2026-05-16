@@ -1,0 +1,232 @@
+# =========================================================================
+# get_pathway_genes_db: Build pathway-gene mapping from an OrgDb object
+# =========================================================================
+#
+# Alternative to get_pathway_genes() for users who have an OrgDb-style
+# gene annotation database (from Bioconductor's org.*.eg.db packages or
+# AnnotationHub). Produces the same named-list output that
+# pathway_dsge() expects, without requiring GAF + OBO files.
+#
+# Key difference from get_pathway_genes():
+#   - Input:  OrgDb object (programmatic access)
+#   - Input:  GAF data.frame (file-based)
+#
+# Typical usage:
+#   library(org.Hs.eg.db)
+#   pw <- get_pathway_genes_db(org.Hs.eg.db)
+
+#' Build pathway-gene mapping from a Bioconductor OrgDb object
+#'
+#' Extracts GO term to gene mappings from an \code{OrgDb} annotation
+#' package (e.g. \code{org.Hs.eg.db}) or an \code{AnnotationHub} record.
+#' Returns a named list in the same format as
+#' \code{\link{get_pathway_genes}()}, ready to pass to
+#' \code{\link{pathway_dsge}()}.
+#'
+#' This function provides an alternative to \code{get_pathway_genes()}
+#' for users who prefer Bioconductor's annotation infrastructure over
+#' GAF + OBO files.
+#'
+#' @param orgdb An \code{OrgDb} object, e.g. \code{org.Hs.eg.db} for
+#'   human, \code{org.Mm.eg.db} for mouse, or a similar object retrieved
+#'   from \code{AnnotationHub}.
+#' @param keytype Key type used to query the \code{OrgDb}. Default
+#'   \code{"ENTREZID"}. Must be one of the key types returned by
+#'   \code{keytypes(orgdb)}.
+#' @param gene_id_col Name for the gene ID column in the output
+#'   data.frames. Default \code{"db_object_id"} (matching the
+#'   \code{get_pathway_genes()} convention; the values are Entrez IDs
+#'   by default).
+#' @param gene_symbol_col Name for the gene symbol column in the output
+#'   data.frames. Default \code{"db_object_symbol"} (matching the
+#'   \code{get_pathway_genes()} convention).
+#' @param min_size Minimum gene count per pathway; pathways below this
+#'   are discarded. Default \code{5}. Pass \code{NULL} to keep all.
+#' @param aspect Ontology aspect filter. \code{NULL} (default) returns
+#'   all. One or more of \code{"BP"} (Biological Process),
+#'   \code{"MF"} (Molecular Function), \code{"CC"} (Cellular Component).
+#' @param evidence Evidence code filter (e.g. \code{"IDA"},
+#'   \code{"IEA"}). \code{NULL} (default) keeps all. Pass a character
+#'   vector to keep only annotations with those evidence codes.
+#' @param attach_go_names Logical. Whether to fetch GO term names and
+#'   ontology classifications via \code{GO.db}. Default \code{TRUE}.
+#'   Requires the \code{GO.db} package to be installed.
+#'
+#' @return A named list where each element is a \code{data.frame} with
+#'   columns \code{go_name} (if attached), \code{go_namespace}
+#'   (if attached), \code{gene_id_col}, and \code{gene_symbol_col}.
+#'   The list names are GO term IDs. This matches the output format of
+#'   \code{\link{get_pathway_genes}()} and can be passed directly to
+#'   \code{\link{pathway_dsge}()}.
+#'
+#' @note This function requires the \code{AnnotationDbi} package. The
+#'   \code{GO.db} package is required when \code{attach_go_names = TRUE}
+#'   (the default). Both are Bioconductor packages; install with
+#'   \code{BiocManager::install(c("AnnotationDbi", "GO.db"))}.
+#'
+#' @seealso \code{\link{get_pathway_genes}} for the GAF-based equivalent.
+#' @importFrom methods is
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' library(org.Hs.eg.db)
+#'
+#' # All pathways, minimum 5 genes
+#' pw <- get_pathway_genes_db(org.Hs.eg.db)
+#'
+#' # Only Biological Process, experimental evidence
+#' pw <- get_pathway_genes_db(org.Hs.eg.db,
+#'                            aspect  = "BP",
+#'                            evidence = c("IDA", "IPI", "IMP", "IGI", "IEP"))
+#' }
+get_pathway_genes_db <- function(orgdb,
+                                  keytype          = "ENTREZID",
+                                  gene_id_col      = "db_object_id",
+                                  gene_symbol_col  = "db_object_symbol",
+                                  min_size         = 5L,
+                                  aspect           = NULL,
+                                  evidence         = NULL,
+                                  attach_go_names  = TRUE) {
+
+  # ---- Dependency checks ----
+  if (!requireNamespace("AnnotationDbi", quietly = TRUE))
+    stop("Package 'AnnotationDbi' is required. ",
+         "Install with: BiocManager::install('AnnotationDbi')",
+         call. = FALSE)
+
+  # ---- Input validation ----
+  if (!is(orgdb, "OrgDb"))
+    stop("'orgdb' must be an OrgDb object (e.g. org.Hs.eg.db)", call. = FALSE)
+
+  # ---- Get all GO annotations from the OrgDb ----
+  # select() with columns = c("GO", "SYMBOL") returns a data.frame
+  # with columns: keytype, SYMBOL, GO, EVIDENCE, ONTOLOGY
+  # Note: ONTOLOGY is a multi-column that comes with GO; it contains
+  # BP/MF/CC classification.
+  all_keys <- AnnotationDbi::keys(orgdb, keytype = keytype)
+
+  go_data <- tryCatch(
+    suppressWarnings(
+      AnnotationDbi::select(orgdb,
+                             keys    = all_keys,
+                             columns = c("GO", "SYMBOL", "EVIDENCE"),
+                             keytype = keytype)
+    ),
+    error = function(e) {
+      # Some OrgDb objects may not have the exact columns requested
+      go_data <- suppressWarnings(
+        AnnotationDbi::select(orgdb,
+                               keys    = all_keys,
+                               columns = c("GO", "SYMBOL"),
+                               keytype = keytype)
+      )
+      # Add empty EVIDENCE column (will be treated as keep-all)
+      go_data$EVIDENCE <- NA_character_
+      go_data$ONTOLOGY <- NA_character_
+      go_data
+    }
+  )
+
+  # ---- Clean up ----
+  # Remove rows where GO is NA (no GO annotation for that key)
+  go_data <- go_data[!is.na(go_data$GO), , drop = FALSE]
+
+  # Remove rows where SYMBOL is NA (can happen for some Entrez IDs)
+  go_data <- go_data[!is.na(go_data$SYMBOL), , drop = FALSE]
+
+  if (nrow(go_data) == 0L)
+    stop("No GO annotations found for the given OrgDb and keytype",
+         call. = FALSE)
+
+  # ---- Filter by evidence code ----
+  if (!is.null(evidence)) {
+    # EVIDENCE may be NA for some annotations; those are kept only if
+    # NA is explicitly included in the evidence filter
+    go_data <- go_data[go_data$EVIDENCE %in% evidence, , drop = FALSE]
+    if (nrow(go_data) == 0L)
+      stop("No rows remain after evidence code filter", call. = FALSE)
+  }
+
+  # ---- Filter by ontology aspect ----
+  if (!is.null(aspect)) {
+    aspect <- match.arg(aspect, c("BP", "MF", "CC"), several.ok = TRUE)
+    # ONTOLOGY may be NA; filter only non-NA matches to avoid
+    # inadvertently keeping rows with missing ontology classification
+    go_data <- go_data[!is.na(go_data$ONTOLOGY) &
+                         go_data$ONTOLOGY %in% aspect, , drop = FALSE]
+    if (nrow(go_data) == 0L)
+      stop("No rows remain after aspect filter", call. = FALSE)
+  }
+
+  # ---- Rename columns to match get_pathway_genes() convention ----
+  key_col <- keytype
+  cols <- colnames(go_data)
+  cols[cols == key_col]       <- gene_id_col
+  cols[cols == "SYMBOL"]      <- gene_symbol_col
+  cols[cols == "GO"]          <- "go_id"
+  # Drop EVIDENCE and ONTOLOGY — not needed in output
+  colnames(go_data) <- cols
+
+  keep_cols <- intersect(c(gene_id_col, gene_symbol_col, "go_id"),
+                          colnames(go_data))
+  go_data <- go_data[, keep_cols, drop = FALSE]
+
+  # ---- Deduplicate within each GO term ----
+  # Use gene_symbol_col for dedup (more robust than gene_id since
+  # different IDs may map to the same symbol)
+  go_data <- go_data[!duplicated(go_data[, c("go_id", gene_symbol_col)]), ,
+                     drop = FALSE]
+
+  # ---- Split by GO term ----
+  result <- split(go_data[, c(gene_id_col, gene_symbol_col), drop = FALSE],
+                  go_data$go_id)
+  result <- result[order(names(result))]
+
+  # ---- Attach GO term names and ontology from GO.db ----
+  if (isTRUE(attach_go_names)) {
+    if (!requireNamespace("GO.db", quietly = TRUE))
+      stop("Package 'GO.db' is required when attach_go_names = TRUE. ",
+           "Install with: BiocManager::install('GO.db')",
+           call. = FALSE)
+
+    go_ids <- names(result)
+    go_info <- tryCatch(
+      suppressWarnings(
+        AnnotationDbi::select(GO.db::GO.db,
+                               keys    = go_ids,
+                               columns = c("TERM", "ONTOLOGY"))
+      ),
+      error = function(e) data.frame(GOID = go_ids,
+                                      TERM = NA_character_,
+                                      ONTOLOGY = NA_character_,
+                                      stringsAsFactors = FALSE)
+    )
+
+    lookup_name <- stats::setNames(go_info$TERM, go_info$GOID)
+    lookup_ns   <- stats::setNames(go_info$ONTOLOGY, go_info$GOID)
+
+    for (go in names(result)) {
+      nm <- if (go %in% names(lookup_name)) lookup_name[[go]] else NA_character_
+      ns <- if (go %in% names(lookup_ns)) lookup_ns[[go]] else NA_character_
+      result[[go]]$go_name      <- nm
+      result[[go]]$go_namespace <- ns
+      # Move go_name and go_namespace to the front
+      result[[go]] <- result[[go]][, c("go_name", "go_namespace",
+                                        setdiff(names(result[[go]]),
+                                                c("go_name", "go_namespace"))),
+                                    drop = FALSE]
+    }
+  }
+
+  # ---- Filter by minimum gene count ----
+  if (!is.null(min_size)) {
+    min_size <- as.integer(min_size)
+    if (is.na(min_size) || min_size < 1L)
+      stop("'min_size' must be a positive integer", call. = FALSE)
+    keep <- vapply(result, nrow, integer(1L)) >= min_size
+    result <- result[keep]
+  }
+
+  result
+}
