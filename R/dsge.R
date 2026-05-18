@@ -1281,12 +1281,9 @@ plot_dsge <- function(result, n = 9L,
 
     # ---- Title: GO name + ontology aspect + ID (truncate if too long) ----
     if (nchar(nm) > 40) nm <- paste0(substr(nm, 1, 37), "...")
-    title_text <- if (nzchar(asp)) {
-      bquote(.(nm) ~ "(" * .(asp) * ")" ~ "\n" ~ italic(.(go_id)))
-    } else {
-      bquote(.(nm) ~ "\n" ~ italic(.(go_id)))
-    }
-    title(main = title_text, cex.main = cex_main, line = -0.2)
+    name_line <- if (nzchar(asp)) paste0(nm, " (", asp, ")") else nm
+    title(main = name_line, cex.main = cex_main, line = 0.8)
+    title(main = bquote(italic(.(go_id))), cex.main = cex_main, line = -0.2)
 
     # ---- GPD tail region highlight ----
     gpd <- if (isTRUE(use_std)) {
@@ -1394,8 +1391,18 @@ plot_dsge <- function(result, n = 9L,
 #'   reference line. Default \code{0.05}.
 #' @param lfc_threshold Numeric vector of logFC thresholds for vertical
 #'   reference lines (e.g. \code{c(-1, 1)}). Default \code{NULL}.
-#' @param color Point color. Default \code{"#D55E00"}.
-#' @param alpha Point transparency in \code{[0, 1]}. Default \code{0.8}.
+#' @param color_up Color for significantly up-regulated genes.
+#'   Default \code{"#CC3333"}.
+#' @param color_down Color for significantly down-regulated genes.
+#'   Default \code{"#3366CC"}.
+#' @param color_ns Color for non-significant genes.
+#'   Default \code{"#AAAAAA"}.
+#' @param alpha_sig Transparency for significant points.
+#'   Default \code{0.9}.
+#' @param alpha_ns Transparency for non-significant points.
+#'   Default \code{0.5}.
+#' @param cex_point Point size for significant genes. Non-significant
+#'   genes are plotted at \code{0.7 * cex_point}. Default \code{1.6}.
 #' @param label Whether to label genes with their names. Auto-set to
 #'   \code{TRUE} when the pathway has \eqn{\le 80} matched genes,
 #'   \code{FALSE} otherwise. Can be forced with \code{TRUE} or
@@ -1449,18 +1456,21 @@ plot_dsge_volcano <- function(de_results,
                                gene_id_col   = "db_object_symbol",
                                threshold     = 0.05,
                                lfc_threshold = NULL,
-                               color         = "#D55E00",
-                               alpha         = 0.8,
+                               color_up      = "#CC3333",
+                               color_down    = "#3366CC",
+                               color_ns      = "#AAAAAA",
+                               alpha_sig     = 0.9,
+                               alpha_ns      = 0.5,
                                label         = NULL,
                                label_genes   = NULL,
                                label_sig     = FALSE,
-                               cex_label     = 0.65,
+                               cex_label     = 0.70,
+                               cex_point     = 1.6,
                                xlab          = NULL,
                                ylab          = NULL,
                                main          = NULL,
                                go_name       = NULL,
                                ...) {
-  # ---- Input checks ----
   stopifnot(is.data.frame(de_results), nrow(de_results) > 0)
   stopifnot(is.list(pathway_genes), go_id %in% names(pathway_genes))
 
@@ -1484,7 +1494,6 @@ plot_dsge_volcano <- function(de_results,
   # ---- Match pathway genes in DE results ----
   in_pw     <- de_results[[gene_col]] %in% pw_genes
   n_matched <- sum(in_pw)
-
   if (n_matched == 0)
     stop("None of the ", n_pw, " genes in pathway '", go_id,
          "' were found in de_results", call. = FALSE)
@@ -1496,24 +1505,32 @@ plot_dsge_volcano <- function(de_results,
   x_vals <- pw_data[[logFC_col]]
   y_vals <- -log10(pw_data[[pval_col]])
 
-  # Cap -log10(0) = Inf at finite value
   y_finite <- y_vals[is.finite(y_vals)]
   if (length(y_finite) > 0) {
     y_max <- stats::quantile(y_finite, 0.995, na.rm = TRUE)
     y_vals[!is.finite(y_vals)] <- y_max * 1.1
   }
 
-  is_sig <- pw_data[[pval_col]] <= threshold
+  is_sig    <- pw_data[[pval_col]] <= threshold
+  is_up     <- x_vals > 0
+  is_down   <- x_vals < 0
+
+  # ---- Point colors (up-red, down-blue, ns-gray) ----
+  point_col <- rep(grDevices::adjustcolor(color_ns, alpha.f = alpha_ns),
+                   length(x_vals))
+  point_col[is_sig & is_up]   <- grDevices::adjustcolor(color_up,   alpha.f = alpha_sig)
+  point_col[is_sig & is_down] <- grDevices::adjustcolor(color_down, alpha.f = alpha_sig)
 
   # ---- Point styling ----
-  point_col <- grDevices::adjustcolor(color, alpha.f = alpha)
-  # significant points get filled circles, non-sig get open circles
-  point_pch <- ifelse(is_sig, 19, 1)
-  point_cex <- ifelse(is_sig, 1.3, 0.9)
+  point_pch <- rep(16, length(x_vals))
+  # Non-sig get slightly smaller and open circles
+  point_pch[!is_sig] <- 1
+  point_cex <- rep(cex_point, length(x_vals))
+  point_cex[!is_sig] <- cex_point * 0.7
 
   # ---- Axis labels ----
-  if (is.null(xlab)) xlab <- bquote(log[2] ~ "fold change")
-  if (is.null(ylab)) ylab <- bquote(-log[10](italic(p)))
+  if (is.null(xlab)) xlab <- expression(log[2] ~ "fold change")
+  if (is.null(ylab)) ylab <- expression(-log[10](italic(p)))
 
   # ---- Title ----
   if (is.null(main)) {
@@ -1527,30 +1544,80 @@ plot_dsge_volcano <- function(de_results,
     main <- paste0(nm, "  (", n_matched, "/", n_pw, " genes)")
   }
 
-  # ---- Plot ----
+  # ---- Plot (clean, no box) ----
+  old_par <- graphics::par(bty = "l", las = 1)
+  on.exit(graphics::par(old_par))
+
+  # Determine x-axis limits with symmetric padding
+  x_abs_max <- max(abs(x_vals), na.rm = TRUE) * 1.15
+  x_abs_max <- max(x_abs_max, if (!is.null(lfc_threshold)) max(abs(lfc_threshold)) * 1.3 else 0)
+  y_abs_max <- max(y_vals, na.rm = TRUE) * 1.10
+
   graphics::plot(x_vals, y_vals,
+                 xlim = c(-x_abs_max, x_abs_max),
+                 ylim = c(0, y_abs_max),
                  xlab = xlab, ylab = ylab, main = main,
                  col = point_col, cex = point_cex, pch = point_pch,
-                 las = 1, ...)
+                 bty = "l", las = 1, ...)
 
   # ---- Reference lines ----
-  graphics::abline(h = -log10(threshold), col = "#888888", lty = 2, lwd = 1)
+  graphics::abline(h = -log10(threshold), col = "#333333", lty = 2, lwd = 0.6)
+  graphics::abline(v = 0, col = "#333333", lty = 3, lwd = 0.4)
   if (!is.null(lfc_threshold)) {
     for (v in lfc_threshold)
-      graphics::abline(v = v, col = "#888888", lty = 3, lwd = 1)
+      graphics::abline(v = v, col = "#333333", lty = 3, lwd = 0.4)
   }
 
   # ---- Legend ----
+  n_up_sig   <- sum(is_sig & is_up, na.rm = TRUE)
+  n_down_sig <- sum(is_sig & is_down, na.rm = TRUE)
+  n_ns       <- sum(!is_sig, na.rm = TRUE)
+
   graphics::legend("topright",
          legend = c(
-           sprintf("DE (p <= %.3f)", threshold),
-           sprintf("Not significant")
+          sprintf("Up (%d)", n_up_sig),
+          sprintf("Down (%d)", n_down_sig),
+          sprintf("NS (%d)", n_ns)
          ),
-         col = grDevices::adjustcolor(color, alpha.f = alpha),
-         pch = c(19, 1), pt.cex = c(1.3, 0.9),
-         cex = 0.7, bty = "n")
+         col = c(grDevices::adjustcolor(color_up,   alpha.f = alpha_sig),
+                 grDevices::adjustcolor(color_down, alpha.f = alpha_sig),
+                 grDevices::adjustcolor(color_ns,   alpha.f = alpha_ns)),
+         pch = c(16, 16, 1),
+         pt.cex = c(cex_point, cex_point, cex_point * 0.7),
+         cex = 0.65, bty = "n", title = "Regulation")
 
-  # ---- Labels ----
+  # ---- Pathway-level DSGE stats ----
+  if (!is.null(dsge_result)) {
+    tbl <- if (is.data.frame(dsge_result)) dsge_result else dsge_result$table
+    row_idx <- which(tbl$go_id == go_id)
+    if (length(row_idx) > 0) {
+      r <- tbl[row_idx[1], ]
+      dsge_std_val <- if ("dsge_std" %in% names(r)) r$dsge_std else NA
+      p_adj_val    <- if ("p_adj" %in% names(r)) r$p_adj else NA
+
+      stat_lines <- character()
+      if (!is.null(dsge_std_val) && !is.na(dsge_std_val))
+        stat_lines <- c(stat_lines, sprintf("DSGE\u209B\u2099\u2091 = %.2f", dsge_std_val))
+      if (!is.null(p_adj_val) && !is.na(p_adj_val)) {
+        if (p_adj_val < 0.001)
+          stat_lines <- c(stat_lines, sprintf("p.adj = %.1e", p_adj_val))
+        else
+          stat_lines <- c(stat_lines, sprintf("p.adj = %.4f", p_adj_val))
+      }
+      # Mean logFC
+      stat_lines <- c(stat_lines,
+                      sprintf("Mean log\u2082FC = %+.3f", mean(x_vals, na.rm = TRUE)))
+
+      if (length(stat_lines) > 0) {
+        graphics::legend("topleft",
+               legend = stat_lines,
+               cex = 0.65, bty = "n", inset = c(0.02, 0.02),
+               text.col = "#333333")
+      }
+    }
+  }
+
+  # ---- Gene labels ----
   do_label <- if (!is.null(label)) {
     isTRUE(label)
   } else {
@@ -1571,47 +1638,26 @@ plot_dsge_volcano <- function(de_results,
 
   if (length(label_idx) > 0) {
     label_text <- as.character(pw_data[[gene_col]][label_idx])
-    graphics::text(x_vals[label_idx], y_vals[label_idx],
-                   labels = label_text,
-                   cex = cex_label, pos = 3,
-                   col = color, xpd = TRUE)
-  }
 
-  # ---- Stats annotation ----
-  n_up   <- sum(x_vals > 0, na.rm = TRUE)
-  n_down <- sum(x_vals < 0, na.rm = TRUE)
-  n_sig  <- sum(is_sig, na.rm = TRUE)
-  mean_lfc <- mean(x_vals, na.rm = TRUE)
-
-  stats_text <- c(
-    sprintf("Up: %d  Down: %d  DE: %d", n_up, n_down, n_sig),
-    sprintf("Mean logFC: %.3f", mean_lfc)
-  )
-
-  # ---- Pathway-level DSGE stats (from dsge_result, if provided) ----
-  if (!is.null(dsge_result)) {
-    tbl <- if (is.data.frame(dsge_result)) dsge_result else dsge_result$table
-    row_idx <- which(tbl$go_id == go_id)
-    if (length(row_idx) > 0) {
-      r <- tbl[row_idx[1], ]
-      dsge_std_val <- if ("dsge_std" %in% names(r)) r$dsge_std else NA
-      p_adj_val    <- if ("p_adj" %in% names(r)) r$p_adj else NA
-      if (!is.na(dsge_std_val))
-        stats_text <- c(stats_text,
-                        sprintf("DSGE_std = %.3f", dsge_std_val))
-      if (!is.na(p_adj_val) && p_adj_val < 0.001)
-        stats_text <- c(stats_text,
-                        sprintf("p.adj = %.1e", p_adj_val))
-      else if (!is.na(p_adj_val))
-        stats_text <- c(stats_text,
-                        sprintf("p.adj = %.3f", p_adj_val))
+    # Add white background for readability
+    for (i in seq_along(label_idx)) {
+      j <- label_idx[i]
+      graphics::text(x_vals[j], y_vals[j],
+                     labels = label_text[i],
+                     cex = cex_label, pos = 3,
+                     offset = 0.3,
+                     col = "#FFFFFF", xpd = TRUE)
+    }
+    # Overdraw in dark color for legible text
+    for (i in seq_along(label_idx)) {
+      j <- label_idx[i]
+      graphics::text(x_vals[j], y_vals[j],
+                     labels = label_text[i],
+                     cex = cex_label, pos = 3,
+                     offset = 0.3,
+                     col = "#222222", xpd = TRUE)
     }
   }
-
-  graphics::legend("topleft",
-         legend = stats_text,
-         cex = 0.65, bty = "n", inset = c(0.02, 0.08),
-         text.col = color)
 
   invisible(pw_data)
 }

@@ -15,12 +15,16 @@ plot_dsge_volcano(
   gene_id_col = "db_object_symbol",
   threshold = 0.05,
   lfc_threshold = NULL,
-  color = "#D55E00",
-  alpha = 0.8,
+  color_up = "#CC3333",
+  color_down = "#3366CC",
+  color_ns = "#AAAAAA",
+  alpha_sig = 0.9,
+  alpha_ns = 0.5,
   label = NULL,
   label_genes = NULL,
   label_sig = FALSE,
-  cex_label = 0.65,
+  cex_label = 0.7,
+  cex_point = 1.6,
   xlab = NULL,
   ylab = NULL,
   main = NULL,
@@ -63,9 +67,20 @@ reference line. Default \code{0.05}.}
 \item{lfc_threshold}{Numeric vector of logFC thresholds for vertical
 reference lines (e.g. \code{c(-1, 1)}). Default \code{NULL}.}
 
-\item{color}{Point color. Default \code{"#D55E00"}.}
+\item{color_up}{Color for significantly up-regulated genes.
+Default \code{"#CC3333"}.}
 
-\item{alpha}{Point transparency in \code{[0, 1]}. Default \code{0.8}.}
+\item{color_down}{Color for significantly down-regulated genes.
+Default \code{"#3366CC"}.}
+
+\item{color_ns}{Color for non-significant genes.
+Default \code{"#AAAAAA"}.}
+
+\item{alpha_sig}{Transparency for significant points.
+Default \code{0.9}.}
+
+\item{alpha_ns}{Transparency for non-significant points.
+Default \code{0.5}.}
 
 \item{label}{Whether to label genes with their names. Auto-set to
 \code{TRUE} when the pathway has \eqn{\le 80} matched genes,
@@ -81,6 +96,9 @@ very large pathways where you only want to highlight a few key genes.}
 \code{label_genes} is provided.}
 
 \item{cex_label}{Text size for gene labels. Default \code{0.65}.}
+
+\item{cex_point}{Point size for significant genes. Non-significant
+genes are plotted at \code{0.7 * cex_point}. Default \code{1.6}.}
 
 \item{xlab, ylab}{Axis labels. Auto-generated when \code{NULL}.}
 
