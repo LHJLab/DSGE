@@ -1356,3 +1356,262 @@ plot_dsge <- function(result, n = 9L,
   }
   title(main = title_text, outer = TRUE, cex.main = 1.1, line = -0.5)
 }
+
+
+# =========================================================================
+# Exported function 5: plot_dsge_volcano -- pathway-level volcano plot
+# =========================================================================
+
+#' Gene-level volcano plot for a specific pathway
+#'
+#' Plots a focused volcano plot showing only the genes belonging to a
+#' specified GO pathway. Each point is one gene from the pathway, with
+#' log2 fold change on the x-axis and statistical significance (-log10
+#' p-value) on the y-axis. This allows visual inspection of the direction,
+#' magnitude, and distribution of perturbation within a single pathway.
+#'
+#' @param de_results Data.frame of differential expression results. Must
+#'   contain at least log2FC, p-value, and gene identifier columns.
+#' @param dsge_result Optional result from \code{\link{pathway_dsge}()}.
+#'   Pass either the full list (where \code{dsge_result$table} is used)
+#'   or the result data.frame directly. When provided, the pathway's
+#'   \code{dsge_std} and \code{p_adj} are shown in the annotation.
+#'   Default \code{NULL}.
+#' @param pathway_genes A named list of pathway-gene mappings, as used in
+#'   \code{\link{pathway_dsge}()}. Each element is a \code{data.frame}
+#'   with a gene identifier column.
+#' @param go_id A single character string specifying which pathway (GO ID)
+#'   to plot. Must be a name in \code{pathway_genes}.
+#' @param logFC_col Column name in \code{de_results} for log2 fold change.
+#'   Default \code{"log2FoldChange"}.
+#' @param pval_col Column name in \code{de_results} for the p-value
+#'   (raw or adjusted). Default \code{"pvalue"}.
+#' @param gene_col Column name in \code{de_results} for gene identifiers
+#'   that match the pathway mapping. Default \code{"geneName"}.
+#' @param gene_id_col Column name in \code{pathway_genes[[go_id]]} that
+#'   holds the gene identifiers. Default \code{"db_object_symbol"}.
+#' @param threshold p-value significance threshold for the horizontal
+#'   reference line. Default \code{0.05}.
+#' @param lfc_threshold Numeric vector of logFC thresholds for vertical
+#'   reference lines (e.g. \code{c(-1, 1)}). Default \code{NULL}.
+#' @param color Point color. Default \code{"#D55E00"}.
+#' @param alpha Point transparency in \code{[0, 1]}. Default \code{0.8}.
+#' @param label Whether to label genes with their names. Auto-set to
+#'   \code{TRUE} when the pathway has \eqn{\le 80} matched genes,
+#'   \code{FALSE} otherwise. Can be forced with \code{TRUE} or
+#'   \code{FALSE}.
+#' @param label_genes Optional character vector of specific gene names
+#'   within the pathway to label. Overrides \code{label}. Useful for
+#'   very large pathways where you only want to highlight a few key genes.
+#' @param label_sig When \code{TRUE}, only label genes that pass the
+#'   \code{threshold}. Default \code{FALSE}. Ignored when
+#'   \code{label_genes} is provided.
+#' @param cex_label Text size for gene labels. Default \code{0.65}.
+#' @param xlab,ylab Axis labels. Auto-generated when \code{NULL}.
+#' @param main Plot title. Default \code{NULL}, auto-generated from
+#'   GO ID and GO name.
+#' @param go_name Optional GO term name for the title. When \code{NULL},
+#'   the function looks for a \code{go_name} column in the DSGE result
+#'   table or uses only the GO ID.
+#' @param ... Additional arguments passed to \code{\link[graphics]{plot}()}.
+#'
+#' @return Invisibly returns the subset of \code{de_results} for the
+#'   pathway genes (data.frame).
+#' @importFrom graphics abline legend points text
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' res <- read.csv("deseq2_results.csv")
+#' gaf <- read_gaf("goa_human.gaf")
+#' go  <- read_obo("go.obo")
+#' pw  <- get_pathway_genes(gaf, go_names = go, min_size = 15)
+#' dsge <- pathway_dsge(pw, res$pvalue, res$baseMean, res$geneName, seed = 42)
+#'
+#' # T cell receptor complex, with DSGE stats
+#' plot_dsge_volcano(res, dsge, pw, go_id = "GO:0042101")
+#'
+#' # With effect size thresholds, only label significant genes
+#' plot_dsge_volcano(res, dsge, pw, go_id = "GO:0032720",
+#'   lfc_threshold = c(-1, 1), label_sig = TRUE)
+#'
+#' # Large pathway, only label specific genes
+#' plot_dsge_volcano(res, pw, go_id = "GO:0005737",
+#'   label_genes = c("TP53", "MYC", "EGFR"))
+#' }
+plot_dsge_volcano <- function(de_results,
+                               dsge_result    = NULL,
+                               pathway_genes,
+                               go_id,
+                               logFC_col     = "log2FoldChange",
+                               pval_col      = "pvalue",
+                               gene_col      = "geneName",
+                               gene_id_col   = "db_object_symbol",
+                               threshold     = 0.05,
+                               lfc_threshold = NULL,
+                               color         = "#D55E00",
+                               alpha         = 0.8,
+                               label         = NULL,
+                               label_genes   = NULL,
+                               label_sig     = FALSE,
+                               cex_label     = 0.65,
+                               xlab          = NULL,
+                               ylab          = NULL,
+                               main          = NULL,
+                               go_name       = NULL,
+                               ...) {
+  # ---- Input checks ----
+  stopifnot(is.data.frame(de_results), nrow(de_results) > 0)
+  stopifnot(is.list(pathway_genes), go_id %in% names(pathway_genes))
+
+  needed <- c(logFC_col, pval_col, gene_col)
+  missing <- needed[!needed %in% names(de_results)]
+  if (length(missing) > 0)
+    stop("Columns not found in de_results: ",
+         paste(missing, collapse = ", "), call. = FALSE)
+
+  # ---- Extract pathway gene set ----
+  pw_df   <- pathway_genes[[go_id]]
+  if (!gene_id_col %in% names(pw_df))
+    stop("Column '", gene_id_col, "' not found in pathway_genes[['",
+         go_id, "]]", call. = FALSE)
+
+  pw_genes <- unique(as.character(pw_df[[gene_id_col]]))
+  n_pw     <- length(pw_genes)
+  if (n_pw == 0)
+    stop("Pathway '", go_id, "' has no genes in the mapping", call. = FALSE)
+
+  # ---- Match pathway genes in DE results ----
+  in_pw     <- de_results[[gene_col]] %in% pw_genes
+  n_matched <- sum(in_pw)
+
+  if (n_matched == 0)
+    stop("None of the ", n_pw, " genes in pathway '", go_id,
+         "' were found in de_results", call. = FALSE)
+
+  # ---- Subset to pathway genes only ----
+  pw_data <- de_results[in_pw, , drop = FALSE]
+
+  # ---- Core plot data ----
+  x_vals <- pw_data[[logFC_col]]
+  y_vals <- -log10(pw_data[[pval_col]])
+
+  # Cap -log10(0) = Inf at finite value
+  y_finite <- y_vals[is.finite(y_vals)]
+  if (length(y_finite) > 0) {
+    y_max <- stats::quantile(y_finite, 0.995, na.rm = TRUE)
+    y_vals[!is.finite(y_vals)] <- y_max * 1.1
+  }
+
+  is_sig <- pw_data[[pval_col]] <= threshold
+
+  # ---- Point styling ----
+  point_col <- grDevices::adjustcolor(color, alpha.f = alpha)
+  # significant points get filled circles, non-sig get open circles
+  point_pch <- ifelse(is_sig, 19, 1)
+  point_cex <- ifelse(is_sig, 1.3, 0.9)
+
+  # ---- Axis labels ----
+  if (is.null(xlab)) xlab <- bquote(log[2] ~ "fold change")
+  if (is.null(ylab)) ylab <- bquote(-log[10](italic(p)))
+
+  # ---- Title ----
+  if (is.null(main)) {
+    nm <- if (!is.null(go_name) && nchar(go_name) > 0) {
+      go_name
+    } else if ("go_name" %in% names(pw_data) && nchar(pw_data$go_name[1]) > 0) {
+      pw_data$go_name[1]
+    } else {
+      go_id
+    }
+    main <- paste0(nm, "  (", n_matched, "/", n_pw, " genes)")
+  }
+
+  # ---- Plot ----
+  graphics::plot(x_vals, y_vals,
+                 xlab = xlab, ylab = ylab, main = main,
+                 col = point_col, cex = point_cex, pch = point_pch,
+                 las = 1, ...)
+
+  # ---- Reference lines ----
+  graphics::abline(h = -log10(threshold), col = "#888888", lty = 2, lwd = 1)
+  if (!is.null(lfc_threshold)) {
+    for (v in lfc_threshold)
+      graphics::abline(v = v, col = "#888888", lty = 3, lwd = 1)
+  }
+
+  # ---- Legend ----
+  graphics::legend("topright",
+         legend = c(
+           sprintf("DE (p <= %.3f)", threshold),
+           sprintf("Not significant")
+         ),
+         col = grDevices::adjustcolor(color, alpha.f = alpha),
+         pch = c(19, 1), pt.cex = c(1.3, 0.9),
+         cex = 0.7, bty = "n")
+
+  # ---- Labels ----
+  do_label <- if (!is.null(label)) {
+    isTRUE(label)
+  } else {
+    n_matched <= 80
+  }
+
+  if (!is.null(label_genes)) {
+    label_idx <- which(pw_data[[gene_col]] %in% label_genes)
+  } else if (do_label) {
+    if (isTRUE(label_sig)) {
+      label_idx <- which(is_sig)
+    } else {
+      label_idx <- seq_len(n_matched)
+    }
+  } else {
+    label_idx <- integer()
+  }
+
+  if (length(label_idx) > 0) {
+    label_text <- as.character(pw_data[[gene_col]][label_idx])
+    graphics::text(x_vals[label_idx], y_vals[label_idx],
+                   labels = label_text,
+                   cex = cex_label, pos = 3,
+                   col = color, xpd = TRUE)
+  }
+
+  # ---- Stats annotation ----
+  n_up   <- sum(x_vals > 0, na.rm = TRUE)
+  n_down <- sum(x_vals < 0, na.rm = TRUE)
+  n_sig  <- sum(is_sig, na.rm = TRUE)
+  mean_lfc <- mean(x_vals, na.rm = TRUE)
+
+  stats_text <- c(
+    sprintf("Up: %d  Down: %d  DE: %d", n_up, n_down, n_sig),
+    sprintf("Mean logFC: %.3f", mean_lfc)
+  )
+
+  # ---- Pathway-level DSGE stats (from dsge_result, if provided) ----
+  if (!is.null(dsge_result)) {
+    tbl <- if (is.data.frame(dsge_result)) dsge_result else dsge_result$table
+    row_idx <- which(tbl$go_id == go_id)
+    if (length(row_idx) > 0) {
+      r <- tbl[row_idx[1], ]
+      dsge_std_val <- if ("dsge_std" %in% names(r)) r$dsge_std else NA
+      p_adj_val    <- if ("p_adj" %in% names(r)) r$p_adj else NA
+      if (!is.na(dsge_std_val))
+        stats_text <- c(stats_text,
+                        sprintf("DSGE_std = %.3f", dsge_std_val))
+      if (!is.na(p_adj_val) && p_adj_val < 0.001)
+        stats_text <- c(stats_text,
+                        sprintf("p.adj = %.1e", p_adj_val))
+      else if (!is.na(p_adj_val))
+        stats_text <- c(stats_text,
+                        sprintf("p.adj = %.3f", p_adj_val))
+    }
+  }
+
+  graphics::legend("topleft",
+         legend = stats_text,
+         cex = 0.65, bty = "n", inset = c(0.02, 0.08),
+         text.col = color)
+
+  invisible(pw_data)
+}
