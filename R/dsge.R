@@ -1450,26 +1450,29 @@ plot_dsge_volcano <- function(de_results,
                                dsge_result    = NULL,
                                pathway_genes,
                                go_id,
-                               logFC_col     = "log2FoldChange",
-                               pval_col      = "pvalue",
-                               gene_col      = "geneName",
-                               gene_id_col   = "db_object_symbol",
-                               threshold     = 0.05,
-                               lfc_threshold = NULL,
-                               color_up      = "#CC3333",
-                               color_down    = "#3366CC",
-                               color_ns      = "#AAAAAA",
-                               alpha_sig     = 0.9,
-                               alpha_ns      = 0.5,
-                               label         = NULL,
-                               label_genes   = NULL,
-                               label_sig     = FALSE,
-                               cex_label     = 0.70,
-                               cex_point     = 1.6,
-                               xlab          = NULL,
-                               ylab          = NULL,
-                               main          = NULL,
-                               go_name       = NULL,
+                               logFC_col      = "log2FoldChange",
+                               pval_col       = "pvalue",
+                               padj_col       = NULL,
+                               gene_col       = "geneName",
+                               gene_id_col    = "db_object_symbol",
+                               threshold      = 0.05,
+                               padj_threshold = 0.05,
+                               lfc_threshold  = NULL,
+                               color_up       = "#CC3333",
+                               color_down     = "#3366CC",
+                               color_nom      = "#CC9933",
+                               color_ns       = "#AAAAAA",
+                               alpha_sig      = 0.9,
+                               alpha_ns       = 0.5,
+                               label          = NULL,
+                               label_genes    = NULL,
+                               label_sig      = FALSE,
+                               cex_label      = 0.70,
+                               cex_point      = 1.6,
+                               xlab           = NULL,
+                               ylab           = NULL,
+                               main           = NULL,
+                               go_name        = NULL,
                                ...) {
   stopifnot(is.data.frame(de_results), nrow(de_results) > 0)
   stopifnot(is.list(pathway_genes), go_id %in% names(pathway_genes))
@@ -1511,22 +1514,28 @@ plot_dsge_volcano <- function(de_results,
     y_vals[!is.finite(y_vals)] <- y_max * 1.1
   }
 
-  is_sig    <- pw_data[[pval_col]] <= threshold
+  is_raw_sig <- pw_data[[pval_col]] <= threshold
+  is_adj_sig <- is_raw_sig  # fallback when no padj_col
+  if (!is.null(padj_col) && padj_col %in% names(pw_data))
+    is_adj_sig <- is_raw_sig & pw_data[[padj_col]] <= padj_threshold
+  is_nom_only <- is_raw_sig & !is_adj_sig
+
   is_up     <- x_vals > 0
   is_down   <- x_vals < 0
 
-  # ---- Point colors (up-red, down-blue, ns-gray) ----
-  point_col <- rep(grDevices::adjustcolor(color_ns, alpha.f = alpha_ns),
+  # ---- Point colors (adj-sig-up, adj-sig-down, nom-only, ns) ----
+  point_col <- rep(grDevices::adjustcolor(color_ns,  alpha.f = alpha_ns),
                    length(x_vals))
-  point_col[is_sig & is_up]   <- grDevices::adjustcolor(color_up,   alpha.f = alpha_sig)
-  point_col[is_sig & is_down] <- grDevices::adjustcolor(color_down, alpha.f = alpha_sig)
+  point_col[is_adj_sig & is_up]   <- grDevices::adjustcolor(color_up,   alpha.f = alpha_sig)
+  point_col[is_adj_sig & is_down] <- grDevices::adjustcolor(color_down, alpha.f = alpha_sig)
+  point_col[is_nom_only]          <- grDevices::adjustcolor(color_nom,  alpha.f = alpha_sig)
 
   # ---- Point styling ----
   point_pch <- rep(16, length(x_vals))
-  # Non-sig get slightly smaller and open circles
-  point_pch[!is_sig] <- 1
+  point_pch[is_nom_only] <- 5   # diamond for nominal-only
+  point_pch[!is_raw_sig] <- 1   # open circle for ns
   point_cex <- rep(cex_point, length(x_vals))
-  point_cex[!is_sig] <- cex_point * 0.7
+  point_cex[!is_raw_sig] <- cex_point * 0.7
 
   # ---- Axis labels ----
   if (is.null(xlab)) xlab <- expression(log[2] ~ "fold change")
@@ -1561,7 +1570,9 @@ plot_dsge_volcano <- function(de_results,
                  bty = "l", las = 1, ...)
 
   # ---- Reference lines ----
-  graphics::abline(h = -log10(threshold), col = "#333333", lty = 2, lwd = 0.6)
+  graphics::abline(h = -log10(threshold),      col = "#333333", lty = 2, lwd = 0.6)
+  if (!is.null(padj_col) && padj_col %in% names(pw_data))
+    graphics::abline(h = -log10(padj_threshold), col = "#888888", lty = 3, lwd = 0.6)
   graphics::abline(v = 0, col = "#333333", lty = 3, lwd = 0.4)
   if (!is.null(lfc_threshold)) {
     for (v in lfc_threshold)
@@ -1569,22 +1580,45 @@ plot_dsge_volcano <- function(de_results,
   }
 
   # ---- Legend ----
-  n_up_sig   <- sum(is_sig & is_up, na.rm = TRUE)
-  n_down_sig <- sum(is_sig & is_down, na.rm = TRUE)
-  n_ns       <- sum(!is_sig, na.rm = TRUE)
+  use_adj <- !is.null(padj_col) && padj_col %in% names(pw_data)
+  if (use_adj) {
+    n_adj_up   <- sum(is_adj_sig & is_up,   na.rm = TRUE)
+    n_adj_down <- sum(is_adj_sig & is_down, na.rm = TRUE)
+    n_nom_only <- sum(is_nom_only, na.rm = TRUE)
+    n_ns       <- sum(!is_raw_sig, na.rm = TRUE)
 
-  graphics::legend("topright",
-         legend = c(
-          sprintf("Up (%d)", n_up_sig),
-          sprintf("Down (%d)", n_down_sig),
-          sprintf("NS (%d)", n_ns)
-         ),
-         col = c(grDevices::adjustcolor(color_up,   alpha.f = alpha_sig),
-                 grDevices::adjustcolor(color_down, alpha.f = alpha_sig),
-                 grDevices::adjustcolor(color_ns,   alpha.f = alpha_ns)),
-         pch = c(16, 16, 1),
-         pt.cex = c(cex_point, cex_point, cex_point * 0.7),
-         cex = 0.65, bty = "n", title = "Regulation")
+    graphics::legend("topright",
+           legend = c(
+            sprintf("Sig up (FDR) (%d)", n_adj_up),
+            sprintf("Sig down (FDR) (%d)", n_adj_down),
+            sprintf("Nominal only (%d)", n_nom_only),
+            sprintf("NS (%d)", n_ns)
+           ),
+           col = c(grDevices::adjustcolor(color_up,   alpha.f = alpha_sig),
+                   grDevices::adjustcolor(color_down, alpha.f = alpha_sig),
+                   grDevices::adjustcolor(color_nom,  alpha.f = alpha_sig),
+                   grDevices::adjustcolor(color_ns,   alpha.f = alpha_ns)),
+           pch = c(16, 16, 5, 1),
+           pt.cex = c(cex_point, cex_point, cex_point, cex_point * 0.7),
+           cex = 0.65, bty = "n", title = "Regulation")
+  } else {
+    n_up_sig   <- sum(is_raw_sig & is_up,   na.rm = TRUE)
+    n_down_sig <- sum(is_raw_sig & is_down, na.rm = TRUE)
+    n_ns       <- sum(!is_raw_sig, na.rm = TRUE)
+
+    graphics::legend("topright",
+           legend = c(
+            sprintf("Up (%d)", n_up_sig),
+            sprintf("Down (%d)", n_down_sig),
+            sprintf("NS (%d)", n_ns)
+           ),
+           col = c(grDevices::adjustcolor(color_up,   alpha.f = alpha_sig),
+                   grDevices::adjustcolor(color_down, alpha.f = alpha_sig),
+                   grDevices::adjustcolor(color_ns,   alpha.f = alpha_ns)),
+           pch = c(16, 16, 1),
+           pt.cex = c(cex_point, cex_point, cex_point * 0.7),
+           cex = 0.65, bty = "n", title = "Regulation")
+  }
 
   # ---- Pathway-level DSGE stats ----
   if (!is.null(dsge_result)) {
@@ -1628,7 +1662,7 @@ plot_dsge_volcano <- function(de_results,
     label_idx <- which(pw_data[[gene_col]] %in% label_genes)
   } else if (do_label) {
     if (isTRUE(label_sig)) {
-      label_idx <- which(is_sig)
+      label_idx <- which(is_raw_sig)
     } else {
       label_idx <- seq_len(n_matched)
     }
