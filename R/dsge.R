@@ -1528,11 +1528,12 @@ plot_dsge_volcano <- function(de_results,
                    length(x_vals))
   point_col[is_adj_sig & is_up]   <- grDevices::adjustcolor(color_up,   alpha.f = alpha_sig)
   point_col[is_adj_sig & is_down] <- grDevices::adjustcolor(color_down, alpha.f = alpha_sig)
-  point_col[is_nom_only]          <- grDevices::adjustcolor(color_nom,  alpha.f = alpha_sig)
+  point_col[is_nom_only & is_up]   <- grDevices::adjustcolor(color_up,   alpha.f = alpha_sig)
+  point_col[is_nom_only & is_down] <- grDevices::adjustcolor(color_down, alpha.f = alpha_sig)
 
   # ---- Point styling ----
   point_pch <- rep(16, length(x_vals))
-  point_pch[is_nom_only] <- 5   # diamond for nominal-only
+  point_pch[is_nom_only] <- 1   # open circle for nominal-only
   point_pch[!is_raw_sig] <- 1   # open circle for ns
   point_cex <- rep(cex_point, length(x_vals))
   point_cex[!is_raw_sig] <- cex_point * 0.7
@@ -1554,7 +1555,7 @@ plot_dsge_volcano <- function(de_results,
   }
 
   # ---- Plot (clean, no box) ----
-  old_par <- graphics::par(bty = "l", las = 1)
+  old_par <- graphics::par(bty = "o", las = 1)
   on.exit(graphics::par(old_par))
 
   # Determine x-axis limits with symmetric padding
@@ -1567,7 +1568,7 @@ plot_dsge_volcano <- function(de_results,
                  ylim = c(0, y_abs_max),
                  xlab = xlab, ylab = ylab, main = main,
                  col = point_col, cex = point_cex, pch = point_pch,
-                 bty = "l", las = 1, ...)
+                 bty = "o", las = 1, ...)
 
   # ---- Reference lines ----
   graphics::abline(h = -log10(threshold),      col = "#333333", lty = 2, lwd = 0.6)
@@ -1584,22 +1585,25 @@ plot_dsge_volcano <- function(de_results,
   if (use_adj) {
     n_adj_up   <- sum(is_adj_sig & is_up,   na.rm = TRUE)
     n_adj_down <- sum(is_adj_sig & is_down, na.rm = TRUE)
-    n_nom_only <- sum(is_nom_only, na.rm = TRUE)
+    n_nom_up   <- sum(is_nom_only & is_up,   na.rm = TRUE)
+    n_nom_down <- sum(is_nom_only & is_down, na.rm = TRUE)
     n_ns       <- sum(!is_raw_sig, na.rm = TRUE)
 
     graphics::legend("topright",
            legend = c(
             sprintf("Sig up (FDR) (%d)", n_adj_up),
             sprintf("Sig down (FDR) (%d)", n_adj_down),
-            sprintf("Nominal only (%d)", n_nom_only),
+            sprintf("Nominal up (%d)", n_nom_up),
+            sprintf("Nominal down (%d)", n_nom_down),
             sprintf("NS (%d)", n_ns)
            ),
            col = c(grDevices::adjustcolor(color_up,   alpha.f = alpha_sig),
                    grDevices::adjustcolor(color_down, alpha.f = alpha_sig),
-                   grDevices::adjustcolor(color_nom,  alpha.f = alpha_sig),
+                   grDevices::adjustcolor(color_up,   alpha.f = alpha_sig),
+                   grDevices::adjustcolor(color_down, alpha.f = alpha_sig),
                    grDevices::adjustcolor(color_ns,   alpha.f = alpha_ns)),
-           pch = c(16, 16, 5, 1),
-           pt.cex = c(cex_point, cex_point, cex_point, cex_point * 0.7),
+           pch = c(16, 16, 1, 1, 1),
+           pt.cex = c(cex_point, cex_point, cex_point, cex_point, cex_point * 0.7),
            cex = 0.65, bty = "n", title = "Regulation")
   } else {
     n_up_sig   <- sum(is_raw_sig & is_up,   na.rm = TRUE)
@@ -1652,10 +1656,12 @@ plot_dsge_volcano <- function(de_results,
   }
 
   # ---- Gene labels ----
-  do_label <- if (!is.null(label)) {
-    isTRUE(label)
+  # 默认: 小通路标全部，大通路只标显著
+  if (is.null(label)) {
+    do_label <- n_matched <= 80
+    if (!do_label && isTRUE(label_sig)) do_label <- TRUE
   } else {
-    n_matched <= 80
+    do_label <- isTRUE(label)
   }
 
   if (!is.null(label_genes)) {
@@ -1663,6 +1669,8 @@ plot_dsge_volcano <- function(de_results,
   } else if (do_label) {
     if (isTRUE(label_sig)) {
       label_idx <- which(is_raw_sig)
+      # 超过80个显著基因只标top80（最显著），避免图面拥挤
+      if (length(label_idx) > 80) label_idx <- label_idx[1:80]
     } else {
       label_idx <- seq_len(n_matched)
     }
