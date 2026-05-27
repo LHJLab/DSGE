@@ -708,7 +708,7 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'                        seed = 42)
 #' head(result)
 #' }
-pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
+pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
                          gene_id_col       = "db_object_symbol",
                          base_mean_cutoff  = 0.1,
                          min_size          = 5L,
@@ -733,7 +733,8 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
 
   # ---- Input validation ----
   stopifnot(is.list(pathway_genes), length(pathway_genes) > 0)
-  stopifnot(length(pvalue) == length(base_mean))
+  if (!is.null(base_mean))
+    stopifnot(length(pvalue) == length(base_mean))
   stopifnot(length(pvalue) == length(gene_names))
   stopifnot(is.character(gene_id_col), length(gene_id_col) == 1L)
   stopifnot(min_size >= 1L, n_perm >= 1L)
@@ -748,17 +749,24 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
             call. = FALSE)
     uniq <- !duplicated(gene_names)
     pvalue    <- pvalue[uniq]
-    base_mean <- base_mean[uniq]
+    if (!is.null(base_mean))
+      base_mean <- base_mean[uniq]
     gene_names <- gene_names[uniq]
   }
 
   # Filter: p-value non-missing, baseMean non-missing, baseMean > cutoff
-  keep <- !is.na(pvalue) & !is.na(base_mean) & base_mean > base_mean_cutoff
+  keep <- !is.na(pvalue)
+  if (!is.null(base_mean))
+    keep <- keep & !is.na(base_mean) & base_mean > base_mean_cutoff
   pool_z <- compute_zscore(pvalue[keep])        # raw z-scores
   names(pool_z) <- gene_names[keep]
   n_pool <- length(pool_z)
-  if (n_pool == 0)
-    stop("No genes pass the baseMean > ", base_mean_cutoff, " filter", call. = FALSE)
+  if (n_pool == 0) {
+    if (!is.null(base_mean))
+      stop("No genes pass the baseMean > ", base_mean_cutoff, " filter", call. = FALSE)
+    else
+      stop("No genes pass the non-missing pvalue filter", call. = FALSE)
+  }
 
   # =========================================================================
   # Step 2: Match each pathway's genes to the gene pool
@@ -1036,8 +1044,17 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
     stringsAsFactors = FALSE,
     row.names = NULL
   )
-  if (isTRUE(use_std))
-    result$dsge_std <- dsge_std_vals
+  if (isTRUE(use_std)) {
+    # Insert dsge_std immediately after dsge column
+    dsge_pos <- which(names(result) == "dsge")
+    result <- data.frame(
+      result[, seq_len(dsge_pos), drop = FALSE],
+      dsge_std = dsge_std_vals,
+      result[, seq(dsge_pos + 1, ncol(result)), drop = FALSE],
+      stringsAsFactors = FALSE,
+      row.names = NULL
+    )
+  }
   if (heterogeneity) {
     result$gini        <- gini_obs
     result$cv          <- cv_obs
