@@ -6,8 +6,8 @@
 # Core idea:
 #   1. Convert DESeq2 differential expression p-values to absolute z-scores
 #      (|z-score|); larger z means stronger transcriptional perturbation.
-#   2. For each GO pathway (gene set), compute the NormZ-weighted mean of
-#      member gene z-scores as the pathway DSGE.
+#   2. For each GO pathway (gene set), compute the mean of member gene
+#      z-scores as the pathway DSGE.
 #   3. Generate null distributions via permutation test: randomly draw
 #      equally-sized gene sets from the background pool, compute random
 #      DSGE, repeat n times.
@@ -18,17 +18,7 @@
 #
 # Key formulas (computed on each drawn gene subset):
 #   Per-gene z-score:    z_i = |Φ⁻¹(1 - p_i/2)|
-#   Subset NormZ:        NormZ = Σ(N_i · z_i) / √(Σ N_i²)
-#   Pathway DSGE:        DSGE = NormZ / G = Σ(N_i · z_i) / [G · √(Σ N_i²)]
-#
-#   where N_i is the number of biological replicates for gene i,
-#   and G is the number of genes in the subset.
-#   When all N_i are equal: DSGE = mean(z_i) / √G
-#   Unweighted (n_replicates = NULL): DSGE = mean(z_i)
-#
-#   Note: The √(Σ N_i²) normalization is applied per subset, not
-#   globally. This ensures reasonable scale relationships across
-#   pathways of different sizes.
+#   Pathway DSGE:        DSGE = mean(z_i)
 #
 # Dependencies:
 #   evd  - pgpd(): survival function of the Generalized Pareto Distribution
@@ -46,7 +36,6 @@
 # infinite z-scores.
 #
 # Note: This function only computes raw z_i = |Φ⁻¹(1 - p_i/2)|.
-# NormZ weighting and normalization are applied later per subset.
 #
 # Args:
 #   pvalue - numeric vector, DESeq2 p-values
@@ -65,30 +54,18 @@ compute_zscore <- function(pvalue) {
 }
 
 
-# ---- Internal helper: compute DSGE on a gene subset (with NormZ weighting) ----
+# ---- Internal helper: compute DSGE on a gene subset ----
 #
-# Given a gene index subset, compute DSGE:
-#   Unweighted:         DSGE = mean(z_i)
-#   NormZ weighted:     DSGE = Σ(N_i · z_i) / [G · √(Σ N_i²)]
-#
-# When all N_i are equal, the weighted formula reduces to mean(z_i) / √G.
+# Given a gene index subset, compute DSGE = mean(z_i).
 #
 # Args:
 #   idx    - indices of genes in pool_z
 #   pool_z - raw z-scores of the full gene pool
-#   pool_N - replicate count vector (NULL = unweighted)
+#   pool_z - raw z-scores of the full gene pool
 #
 # Returns: scalar DSGE
-compute_dsge <- function(idx, pool_z, pool_N = NULL) {
-  if (is.null(pool_N)) {
-    # Unweighted: plain mean of z-scores
-    mean(pool_z[idx])
-  } else {
-    # NormZ weighted: Σ(N·z) / [G · √(Σ N²)]
-    N_sub <- pool_N[idx]
-    z_sub <- pool_z[idx]
-    sum(N_sub * z_sub) / (length(idx) * sqrt(sum(N_sub^2)))
-  }
+compute_dsge <- function(idx, pool_z) {
+  mean(pool_z[idx])
 }
 
 
@@ -101,22 +78,11 @@ compute_dsge <- function(idx, pool_z, pool_N = NULL) {
 # Args:
 #   mat    - sz × nb integer matrix, each column is one permutation sample
 #   pool_z - raw z-scores of the full gene pool
-#   pool_N - replicate count vector (NULL = unweighted)
 #
 # Returns: numeric vector of length nb (one DSGE per column)
-compute_dsge_batch <- function(mat, pool_z, pool_N = NULL) {
-  # vector[matrix] in R drops dimensions; must restore explicitly
+compute_dsge_batch <- function(mat, pool_z) {
   val_z <- pool_z[mat]; dim(val_z) <- dim(mat)
-
-  if (is.null(pool_N)) {
-    # Unweighted: column means
-    colMeans(val_z)
-  } else {
-    # NormZ weighted: Σ(N·z) / [sz · √(Σ N²)] per column
-    val_N <- pool_N[mat]; dim(val_N) <- dim(mat)
-    sz <- nrow(mat)
-    colSums(val_N * val_z) / (sz * sqrt(colSums(val_N^2)))
-  }
+  colMeans(val_z)
 }
 
 
@@ -328,9 +294,6 @@ compute_cv_batch <- function(mat, pool_z) {
 #' @param base_mean_cutoff Expression filter threshold, default 0.1.
 #'   Genes with mean expression at or below this value are excluded as
 #'   lowly expressed. Ignored when base_mean = NULL.
-#' @param n_replicates \strong{[Deprecated]}. This parameter is no longer
-#'   used and will be removed in a future version. Unweighted DSGE is
-#'   used regardless of its value.
 #'
 #' @return A list with elements:
 #'   \item{dsge}{scalar, genome-wide DSGE}
@@ -344,19 +307,12 @@ compute_cv_batch <- function(mat, pool_z) {
 #' res <- DESeq2::results(dds)
 #' calc_dsge(res$pvalue, res$baseMean)
 #' }
-calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1,
-                       n_replicates = NULL) {
+calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
   # ---- Input validation ----
   if (length(pvalue) == 0)
     stop("'pvalue' is empty", call. = FALSE)
   if (!is.null(base_mean) && length(base_mean) != length(pvalue))
     stop("'base_mean' must have the same length as 'pvalue'", call. = FALSE)
-
-  # ---- Deprecation ----
-  if (!is.null(n_replicates))
-    warning("'n_replicates' is deprecated; NormZ weighting will be ",
-            "removed in a future version. Unweighted DSGE is now used.",
-            call. = FALSE)
 
   # ---- Gene filtering ----
   keep <- !is.na(pvalue)
@@ -370,16 +326,8 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1,
   if (!is.null(names(pvalue)))
     names(pool_z) <- names(pvalue)[keep]
 
-  # ---- Process replicate counts ----
-  if (!is.null(n_replicates)) {
-    if (length(n_replicates) == 1L)
-      n_replicates <- rep(n_replicates, sum(keep))
-    else
-      n_replicates <- n_replicates[keep]
-  }
-
-  # ---- Compute DSGE (NormZ formula over all retained genes) ----
-  dsge_val <- compute_dsge(seq_along(pool_z), pool_z, n_replicates)
+  # ---- Compute DSGE ----
+  dsge_val <- compute_dsge(seq_along(pool_z), pool_z)
 
   list(dsge = dsge_val, n_genes = sum(keep), z_scores = pool_z)
 }
@@ -401,10 +349,10 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1,
 #'   \item Filter gene pool: baseMean > cutoff, non-missing p-value.
 #'   \item Convert p-values to per-gene raw z-scores.
 #'   \item Match \code{gene_list} to the filtered gene pool; compute
-#'         observed DSGE using the NormZ formula.
+#'         observed DSGE (mean z-score).
 #'   \item Generate null distribution: randomly sample (without
 #'         replacement) equally-sized gene sets from the pool,
-#'         computing random DSGE via the same NormZ formula, repeated
+#'         computing random DSGE via the same mean z-score formula, repeated
 #'         n_perm times.
 #'   \item Empirical right-tail p-value: count(DSGE_null > DSGE_obs) / n_perm.
 #' }
@@ -419,9 +367,6 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1,
 #' @param gene_names Character vector of gene names, same length as
 #'   pvalue, must be unique.
 #' @param base_mean_cutoff baseMean filter threshold, default 0.1.
-#' @param n_replicates \strong{[Deprecated]}. This parameter is no longer
-#'   used and will be removed in a future version. Unweighted DSGE
-#'   (mean of z-scores) is used regardless of its value.
 #' @param n_perm Number of permutations, default 10000.
 #' @param seed Optional integer random seed for reproducibility.
 #' @param progress Whether to show a progress bar, default TRUE.
@@ -490,48 +435,35 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1,
 #' }
 dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
                            base_mean_cutoff = 0.1,
-                           n_replicates     = NULL,
                            n_perm           = 10000L,
                            seed             = NULL,
                            progress         = TRUE,
                            heterogeneity    = FALSE,
                            use_std           = TRUE,
                            use_gpd           = TRUE,
-                           gpd_threshold     = 0.90,
+                           gpd_threshold     = 0.99,
                            gpd_method        = "mle",
                            safety_margin     = 1.05) {
   # ---- Input validation ----
   stopifnot(is.character(gene_list), length(gene_list) > 0)
-  stopifnot(length(pvalue) == length(base_mean))
+  if (!is.null(base_mean))
+    stopifnot(length(pvalue) == length(base_mean))
   stopifnot(length(pvalue) == length(gene_names))
   if (anyDuplicated(gene_names))
     stop("'gene_names' must be unique", call. = FALSE)
 
-  # ---- Deprecation ----
-  if (!is.null(n_replicates))
-    warning("'n_replicates' is deprecated; NormZ weighting will be ",
-            "removed in a future version. Unweighted DSGE is now used.",
-            call. = FALSE)
-
   # ---- Build filtered gene pool ----
-  keep <- !is.na(pvalue) & !is.na(base_mean) & base_mean > base_mean_cutoff
+  keep <- !is.na(pvalue)
+  if (!is.null(base_mean))
+    keep <- keep & !is.na(base_mean) & base_mean > base_mean_cutoff
   pool_z <- compute_zscore(pvalue[keep])
   names(pool_z) <- gene_names[keep]
   n_pool <- length(pool_z)
-  if (n_pool == 0)
-    stop("No genes pass the baseMean > ", base_mean_cutoff, " filter", call. = FALSE)
-
-  # ---- Set up replicate count vector ----
-  if (!is.null(n_replicates)) {
-    if (length(n_replicates) == 1L)
-      pool_N <- rep(n_replicates, n_pool)
-    else {
-      if (length(n_replicates) != length(pvalue))
-        stop("'n_replicates' must match 'pvalue' length", call. = FALSE)
-      pool_N <- n_replicates[keep]
-    }
-  } else {
-    pool_N <- NULL
+  if (n_pool == 0) {
+    if (!is.null(base_mean))
+      stop("No genes pass the baseMean > ", base_mean_cutoff, " filter", call. = FALSE)
+    else
+      stop("No genes pass the non-missing pvalue filter", call. = FALSE)
   }
 
   # ---- Match target genes to gene pool ----
@@ -541,7 +473,7 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
     stop("No genes from 'gene_list' found in the filtered gene pool", call. = FALSE)
 
   n_target <- length(idx)
-  observed <- compute_dsge(idx, pool_z, pool_N)
+  observed <- compute_dsge(idx, pool_z)
 
   if (heterogeneity) {
     observed_gini <- compute_gini(pool_z[idx])
@@ -559,7 +491,7 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
   if (progress) pb <- utils::txtProgressBar(min = 0, max = n_perm, style = 3)
   for (i in seq_len(n_perm)) {
     samp <- sample.int(n_pool, n_target, replace = FALSE)
-    null[i] <- compute_dsge(samp, pool_z, pool_N)
+    null[i] <- compute_dsge(samp, pool_z)
     if (heterogeneity) {
       z_sub <- pool_z[samp]
       null_gini[i] <- compute_gini(z_sub)
@@ -645,11 +577,11 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'         the gene pool via the \code{gene_id_col} column.
 #'   \item \strong{Filter pathways}: retain pathways with
 #'         \code{min_size <= n_matched <= max_size}.
-#'   \item \strong{Compute observed DSGE}: per pathway using the NormZ
-#'         formula: DSGE = sum(N*z) / [G * sqrt(sum(N^2))].
+#'   \item \strong{Compute observed DSGE}: per pathway as the mean of
+#'         member gene z-scores: DSGE = mean(z_i).
 #'   \item \strong{Generate size-grouped null distributions}: each unique
 #'         matched-gene count gets its own permutation run (vectorized
-#'         batch sampling) using the same NormZ formula, with
+#'         batch sampling), with
 #'         simultaneous GPD tail fitting.
 #'   \item \strong{Compute standardised DSGE} (step 6): when
 #'         \code{use_std = TRUE}, compute \code{dsge_std = (observed -
@@ -677,9 +609,6 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #' @param gene_id_col Column name in pathway_genes data.frames used to
 #'   match gene names, default \code{"db_object_symbol"}.
 #' @param base_mean_cutoff baseMean filter threshold, default 0.1.
-#' @param n_replicates \strong{[Deprecated]}. This parameter is no longer
-#'   used and will be removed in a future version. Unweighted DSGE
-#'   (mean of z-scores) is used regardless of its value.
 #' @param min_size Minimum number of matched genes; pathways below this
 #'   are not tested. Default 5.
 #' @param max_size Maximum number of matched genes; pathways above this
@@ -707,7 +636,7 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'           without GPD tail extrapolation.
 #'   }
 #'   When \code{FALSE}, p-values are computed from the raw null
-#'   distribution with GPD tail extrapolation.
+#'   distribution (using GPD when \code{use_gpd = TRUE}).
 #' @param use_gpd Whether to use GPD tail extrapolation for extreme
 #'   p-values. Default \code{TRUE}. When \code{TRUE} and the observed
 #'   DSGE exceeds the \code{gpd_threshold} quantile of the null, the
@@ -782,7 +711,6 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
                          gene_id_col       = "db_object_symbol",
                          base_mean_cutoff  = 0.1,
-                         n_replicates      = NULL,
                          min_size          = 5L,
                          max_size          = 500L,
                          n_perm            = 10000L,
@@ -792,7 +720,7 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
                          heterogeneity     = FALSE,
                          use_std           = TRUE,
                          use_gpd           = TRUE,
-                         gpd_threshold     = 0.90,
+                         gpd_threshold     = 0.99,
                          gpd_method        = "mle",
                          safety_margin     = 1.05,
                          n_cores           = 1L,
@@ -810,12 +738,6 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
   stopifnot(is.character(gene_id_col), length(gene_id_col) == 1L)
   stopifnot(min_size >= 1L, n_perm >= 1L)
 
-  # ---- Deprecation ----
-  if (!is.null(n_replicates))
-    warning("'n_replicates' is deprecated; NormZ weighting will be ",
-            "removed in a future version. Unweighted DSGE is now used.",
-            call. = FALSE)
-
   # =========================================================================
   # Step 1: Build DESeq2 gene pool
   # =========================================================================
@@ -828,8 +750,6 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
     pvalue    <- pvalue[uniq]
     base_mean <- base_mean[uniq]
     gene_names <- gene_names[uniq]
-    if (!is.null(n_replicates) && length(n_replicates) > 1L)
-      n_replicates <- n_replicates[uniq]
   }
 
   # Filter: p-value non-missing, baseMean non-missing, baseMean > cutoff
@@ -839,18 +759,6 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
   n_pool <- length(pool_z)
   if (n_pool == 0)
     stop("No genes pass the baseMean > ", base_mean_cutoff, " filter", call. = FALSE)
-
-  # Set up replicate count vector (if provided)
-  if (!is.null(n_replicates)) {
-    if (length(n_replicates) == 1L)
-      pool_N <- rep(n_replicates, n_pool)
-    else
-      pool_N <- n_replicates[keep]
-    weighted <- TRUE
-  } else {
-    pool_N   <- NULL
-    weighted <- FALSE
-  }
 
   # =========================================================================
   # Step 2: Match each pathway's genes to the gene pool
@@ -890,9 +798,8 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
   # =========================================================================
   # Step 4: Compute observed DSGE per pathway (and optional Gini, CV)
   # =========================================================================
-  # Unweighted: DSGE = mean(z_i)
-  # Weighted:   DSGE = Σ(N·z) / [G · √(Σ N²)]
-  observed <- vapply(matched, function(idx) compute_dsge(idx, pool_z, pool_N),
+  # DSGE = mean(z_i)
+  observed <- vapply(matched, function(idx) compute_dsge(idx, pool_z),
                      numeric(1L))
   if (heterogeneity) {
     gini_obs <- vapply(matched, function(idx) compute_gini(pool_z[idx]),
@@ -961,7 +868,7 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
       for (b in seq(1L, n_perm, by = bat)) {
         nb <- min(bat, n_perm - b + 1L)
         mat <- matrix(sample.int(n_pool, sz * nb, replace = FALSE), nrow = sz)
-        nul[b:(b + nb - 1L)] <- compute_dsge_batch(mat, pool_z, pool_N)
+        nul[b:(b + nb - 1L)] <- compute_dsge_batch(mat, pool_z)
         if (heterogeneity) {
           nul_gini[b:(b + nb - 1L)] <- compute_gini_batch(mat, pool_z)
           nul_cv[b:(b + nb - 1L)]   <- compute_cv_batch(mat, pool_z)
@@ -1012,7 +919,7 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean, gene_names,
       for (b in seq(1L, n_perm, by = bat)) {
         nb <- min(bat, n_perm - b + 1L)
         mat <- matrix(sample.int(n_pool, sz * nb, replace = FALSE), nrow = sz)
-        nul[b:(b + nb - 1L)] <- compute_dsge_batch(mat, pool_z, pool_N)
+        nul[b:(b + nb - 1L)] <- compute_dsge_batch(mat, pool_z)
         if (heterogeneity) {
           nul_gini[b:(b + nb - 1L)] <- compute_gini_batch(mat, pool_z)
           nul_cv[b:(b + nb - 1L)]   <- compute_cv_batch(mat, pool_z)
@@ -1391,12 +1298,24 @@ plot_dsge <- function(result, n = 9L,
 #'   reference line. Default \code{0.05}.
 #' @param lfc_threshold Numeric vector of logFC thresholds for vertical
 #'   reference lines (e.g. \code{c(-1, 1)}). Default \code{NULL}.
+#' @param padj_col Optional column name in \code{de_results} for adjusted
+#'   p-values (e.g. \code{"padj"}). When provided, points are classified
+#'   as adjusted-significant using \code{padj_threshold}, and an
+#'   additional "Nominal" category appears in the legend. Default
+#'   \code{NULL} (uses \code{threshold} only).
+#' @param padj_threshold Adjusted p-value threshold for significance
+#'   classification. Default \code{0.05}. Only used when
+#'   \code{padj_col} is provided.
 #' @param color_up Color for significantly up-regulated genes.
 #'   Default \code{"#CC3333"}.
 #' @param color_down Color for significantly down-regulated genes.
 #'   Default \code{"#3366CC"}.
 #' @param color_ns Color for non-significant genes.
 #'   Default \code{"#AAAAAA"}.
+#' @param color_nom Color for nominally significant genes (raw p-value
+#'   below \code{threshold} but adjusted p-value above
+#'   \code{padj_threshold}). Default \code{"#CC9933"}. Only used when
+#'   \code{padj_col} is provided.
 #' @param alpha_sig Transparency for significant points.
 #'   Default \code{0.9}.
 #' @param alpha_ns Transparency for non-significant points.
@@ -1656,7 +1575,7 @@ plot_dsge_volcano <- function(de_results,
   }
 
   # ---- Gene labels ----
-  # 默认: 小通路标全部，大通路只标显著
+  # Default: small pathways label all genes, large pathways only significant
   if (is.null(label)) {
     do_label <- n_matched <= 80
     if (!do_label && isTRUE(label_sig)) do_label <- TRUE
@@ -1669,7 +1588,7 @@ plot_dsge_volcano <- function(de_results,
   } else if (do_label) {
     if (isTRUE(label_sig)) {
       label_idx <- which(is_raw_sig)
-      # 超过80个显著基因只标top80（最显著），避免图面拥挤
+      # When >80 significant genes, label only the top 80 to avoid clutter
       if (length(label_idx) > 80) label_idx <- label_idx[1:80]
     } else {
       label_idx <- seq_len(n_matched)
