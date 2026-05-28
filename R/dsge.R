@@ -1011,14 +1011,23 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
 
   if (!is.null(seed)) set.seed(seed)
 
+  # ---- Debug: print reproducible fingerprint of the null-generation state ----
+  if (isTRUE(progress)) {
+    fingerprint <- sum(n_pool * 31 + as.integer(sort(sizes)) * 7 + n_perm)
+    cat("  perm fingerprint:", fingerprint,
+        "(n_pool =", n_pool, ", n_sizes =", length(sizes), ")\n")
+  }
+
   if (n_cores_effective > 1L) {
     # ---- Parallel null generation ----
     if (progress)
       cat("Generating null distributions for", length(sizes),
           "unique sizes using", n_cores_effective, "cores\n")
 
+    has_seed <- !is.null(seed)
     results <- suppressWarnings(
       parallel::mclapply(seq_along(sizes), function(s) {
+      if (has_seed) set.seed(seed + s)       # deterministic per-size RNG stream
       sz  <- sizes[s]
       bat <- max(1L, floor(n_pool / sz))
       nul <- numeric(n_perm)
@@ -1046,7 +1055,7 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
       }
       list(null = nul, null_gpd = gpd_obj, null_gpd_std = gpd_std_obj,
            null_gini = nul_gini, null_cv = nul_cv)
-    }, mc.cores = n_cores_effective, mc.set.seed = TRUE)
+    }, mc.cores = n_cores_effective, mc.preschedule = TRUE)
     )  # suppressWarnings
 
     for (s in seq_along(sizes)) {
