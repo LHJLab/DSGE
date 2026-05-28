@@ -242,6 +242,73 @@ compute_cv <- function(x) {
 }
 
 
+# ---- Internal helper: compute Normalised Direction Score (NDS) ----
+#
+# Computes NDS = (U - D) / max(U, D) for a single pathway, where U is
+# the sum of z-scores of up-regulated genes and D is the sum of
+# z-scores of down-regulated genes.
+#
+# By default, only the top 25% most-perturbed genes (ranked by absolute
+# direction value, e.g. |log2FC|) are retained; the bottom 75% is
+# treated as noise.  Within this subset, U is the sum of z-scores of
+# all up-regulated (dir > 0) genes and D the sum of all down-regulated
+# (dir < 0) genes.  If the top-25% subset contains fewer than 10 genes
+# the function falls back to using all genes — the legacy behaviour.
+#
+# Args:
+#   z_sub - numeric vector of absolute z-scores for pathway genes
+#   d_sub - numeric vector of direction values (e.g. log2FC) of the
+#           same length; NAs are silently removed
+#
+# Returns:
+#   Numeric scalar in [-1, 1].  Positive → net up-regulation;
+#   negative → net down-regulation; NA when no valid direction info.
+compute_nds <- function(z_sub, d_sub) {
+  # Drop genes with missing direction information
+  valid <- !is.na(d_sub)
+  z_sub <- z_sub[valid]
+  d_sub <- d_sub[valid]
+
+  n <- length(z_sub)
+  if (n == 0L) return(NA_real_)
+
+  n_quarter <- floor(n * 0.25)
+
+  if (n_quarter >= 10L) {
+    # Keep only the top 25% most-perturbed genes (largest |log2FC|)
+    ord    <- order(abs(d_sub), decreasing = TRUE)
+    keep   <- ord[seq_len(n_quarter)]
+    z_keep <- z_sub[keep]
+    d_keep <- d_sub[keep]
+    up     <- z_keep[d_keep > 0]
+    down   <- z_keep[d_keep < 0]
+    if (length(up) == 0L || length(down) == 0L) {
+      if (length(up) > 0L)  return(1)
+      if (length(down) > 0L) return(-1)
+      return(NA_real_)
+    }
+    u <- sum(up)
+    d <- sum(down)
+  } else {
+    # Fallback: use all directional genes (legacy behaviour)
+    up   <- z_sub[d_sub > 0]
+    down <- z_sub[d_sub < 0]
+    if (length(up) == 0L || length(down) == 0L) {
+      if (length(up) > 0L)  return(1)
+      if (length(down) > 0L) return(-1)
+      return(NA_real_)
+    }
+    u <- sum(up)
+    d <- sum(down)
+  }
+
+  if (u == 0 && d == 0) return(NA_real_)
+  max_ud <- max(u, d)
+  if (max_ud == 0) return(NA_real_)
+  (u - d) / max_ud
+}
+
+
 # ---- Internal helper: batch-compute Gini coefficient ----
 #
 # Computes Gini for each column of a sz × nb matrix (one permutation
@@ -375,6 +442,17 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
 #'   When enabled, also computes Gini and CV null distributions within
 #'   the permutation loop, increasing runtime by approximately
 #'   30\%-50\%.
+#' @param directional Whether to compute Normalized Direction Score
+#'   (NDS) for each pathway. Default \code{FALSE}. When \code{TRUE},
+#'   \code{direction_vec} must be provided. NDS ranges from -1 to 1:
+#'   positive values indicate net up-regulation, negative values net
+#'   down-regulation. Requires \code{use_gpd = TRUE} (default) for
+#'   reliable extreme p-values alongside directional information.
+#' @param direction_vec Numeric vector of direction indicators
+#'   (e.g., log fold changes), same length as \code{pvalue}. Used to
+#'   classify genes as up-regulated (positive direction) or
+#'   down-regulated (negative direction). Values of exactly 0 are
+#'   treated as up-regulated. Ignored when \code{directional = FALSE}.
 #' @param use_std Whether to compute and use standardised DSGE.
 #'   Default \code{TRUE}. When enabled:
 #'   \itemize{
@@ -415,6 +493,8 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
 #'         observed falls above 90th percentile; empirical ECDF otherwise)}
 #'   \item{ecdf}{empirical cumulative distribution function of the null}
 #'   \item{dsge_std}{(only when \code{use_std = TRUE}) standardised DSGE}
+#'   \item{nds}{(only when \code{directional = TRUE}) Normalized
+#'         Direction Score, ranging from -1 (pure down) to +1 (pure up)}
 #'   \item{gini_observed}{(only when \code{heterogeneity = TRUE}) observed Gini coefficient}
 #'   \item{cv_observed}{(only when \code{heterogeneity = TRUE}) observed CV}
 #'   \item{null_gini}{(only when \code{heterogeneity = TRUE}) Gini null distribution vector}
@@ -439,6 +519,8 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
                            seed             = NULL,
                            progress         = TRUE,
                            heterogeneity    = FALSE,
+                           directional      = FALSE,
+                           direction_vec    = NULL,
                            use_std           = TRUE,
                            use_gpd           = TRUE,
                            gpd_threshold     = 0.99,
@@ -451,6 +533,11 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
   stopifnot(length(pvalue) == length(gene_names))
   if (anyDuplicated(gene_names))
     stop("'gene_names' must be unique", call. = FALSE)
+  if (isTRUE(directional)) {
+    stopifnot("'direction_vec' must be provided when directional = TRUE" =
+                !is.null(direction_vec))
+    stopifnot(length(direction_vec) == length(pvalue))
+  }
 
   # ---- Build filtered gene pool ----
   keep <- !is.na(pvalue)
@@ -466,6 +553,20 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
       stop("No genes pass the non-missing pvalue filter", call. = FALSE)
   }
 
+  # ---- Direction pool (optional) ----
+  if (isTRUE(directional)) {
+    pool_dir_raw <- direction_vec[keep]                # raw log2FC for top-25%
+    pool_dir     <- sign(pool_dir_raw)
+    pool_dir[pool_dir == 0] <- 1
+    keep_dir <- !is.na(pool_dir)
+    if (sum(keep_dir) == 0)
+      stop("No genes with non-NA direction after filtering", call. = FALSE)
+    pool_z       <- pool_z[keep_dir]
+    pool_dir     <- pool_dir[keep_dir]
+    pool_dir_raw <- pool_dir_raw[keep_dir]
+    n_pool       <- length(pool_z)
+  }
+
   # ---- Match target genes to gene pool ----
   idx <- match(gene_list, names(pool_z))
   idx <- idx[!is.na(idx)]
@@ -478,6 +579,11 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
   if (heterogeneity) {
     observed_gini <- compute_gini(pool_z[idx])
     observed_cv   <- compute_cv(pool_z[idx])
+  }
+  if (isTRUE(directional)) {
+    z_sub <- pool_z[idx]
+    d_sub <- pool_dir_raw[idx]                        # raw log2FC for abs-ranking
+    nds_observed <- compute_nds(z_sub, d_sub)
   }
 
   # ---- Permutation: generate null distribution ----
@@ -508,6 +614,7 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
                 n_genes   = n_target,
                 null      = null,
                 dsge_std  = (observed - mean(null)) / sd(null),
+                nds       = if (isTRUE(directional)) nds_observed else NULL,
                 ecdf      = stats::ecdf(null))
 
     null_std <- (null - mean(null)) / sd(null)
@@ -525,6 +632,7 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
     out <- list(observed = observed,
                 n_genes  = n_target,
                 null     = null,
+                nds      = if (isTRUE(directional)) nds_observed else NULL,
                 ecdf     = stats::ecdf(null))
 
     if (isTRUE(use_gpd)) {
@@ -625,6 +733,17 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'   distribution generation, increasing runtime by approximately
 #'   30\%-50\%. The result data.frame will include extra columns
 #'   \code{gini}, \code{cv}, \code{het_p_value}, \code{het_p_adj}.
+#' @param directional Whether to compute Normalized Direction Score
+#'   (NDS) for each pathway. Default \code{FALSE}. When \code{TRUE},
+#'   \code{direction_vec} must be provided. NDS ranges from -1 to 1:
+#'   positive values indicate net up-regulation, negative values net
+#'   down-regulation. The result data.frame will include an
+#'   \code{nds} column.
+#' @param direction_vec Numeric vector of direction indicators
+#'   (e.g., log fold changes), same length as \code{pvalue}. Used to
+#'   classify genes as up-regulated (positive direction) or
+#'   down-regulated (negative direction). Values of exactly 0 are
+#'   treated as up-regulated. Ignored when \code{directional = FALSE}.
 #' @param use_std Whether to compute and use standardised DSGE.
 #'   Default \code{TRUE}. When enabled:
 #'   \itemize{
@@ -678,6 +797,9 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'   When \code{heterogeneity = TRUE}, additionally includes:
 #'   \code{gini}, \code{cv}, \code{het_p_value}, \code{het_p_adj}.
 #'
+#'   When \code{directional = TRUE}, additionally includes:
+#'   \code{nds} (Normalized Direction Score, ranging from -1 to +1).
+#'
 #'   When \code{use_std = TRUE} (default), additionally includes:
 #'   \code{dsge_std} = (observed DSGE - mean(null)) / sd(null),
 #'   standardised using the size-grouped null distribution.
@@ -718,6 +840,8 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
                          return_null       = FALSE,
                          progress          = TRUE,
                          heterogeneity     = FALSE,
+                         directional       = FALSE,
+                         direction_vec     = NULL,
                          use_std           = TRUE,
                          use_gpd           = TRUE,
                          gpd_threshold     = 0.99,
@@ -738,6 +862,11 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   stopifnot(length(pvalue) == length(gene_names))
   stopifnot(is.character(gene_id_col), length(gene_id_col) == 1L)
   stopifnot(min_size >= 1L, n_perm >= 1L)
+  if (isTRUE(directional)) {
+    stopifnot("'direction_vec' must be provided when directional = TRUE" =
+                !is.null(direction_vec))
+    stopifnot(length(direction_vec) == length(pvalue))
+  }
 
   # =========================================================================
   # Step 1: Build DESeq2 gene pool
@@ -751,6 +880,8 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
     pvalue    <- pvalue[uniq]
     if (!is.null(base_mean))
       base_mean <- base_mean[uniq]
+    if (isTRUE(directional))
+      direction_vec <- direction_vec[uniq]
     gene_names <- gene_names[uniq]
   }
 
@@ -766,6 +897,24 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
       stop("No genes pass the baseMean > ", base_mean_cutoff, " filter", call. = FALSE)
     else
       stop("No genes pass the non-missing pvalue filter", call. = FALSE)
+  }
+
+  # ---- Direction pool (optional) ----
+  if (isTRUE(directional)) {
+    pool_dir_raw <- direction_vec[keep]                # raw log2FC for top-25%
+    pool_dir     <- sign(pool_dir_raw)
+    # sign(0) = 0; treat as up (NA/0 directions removed from pool)
+    pool_dir[pool_dir == 0] <- 1
+    keep_dir <- !is.na(pool_dir)
+    if (sum(keep_dir) == 0)
+      stop("No genes with non-NA direction after filtering", call. = FALSE)
+    pool_z       <- pool_z[keep_dir]
+    pool_dir     <- pool_dir[keep_dir]
+    pool_dir_raw <- pool_dir_raw[keep_dir]
+    n_pool       <- length(pool_z)
+    if (isTRUE(progress))
+      cat("  directional: after filtering", sum(!keep_dir),
+          "genes with NA/zero direction\n")
   }
 
   # =========================================================================
@@ -804,7 +953,7 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   matched   <- matched[keep_pw]
 
   # =========================================================================
-  # Step 4: Compute observed DSGE per pathway (and optional Gini, CV)
+  # Step 4: Compute observed DSGE per pathway (and optional Gini, CV, NDS)
   # =========================================================================
   # DSGE = mean(z_i)
   observed <- vapply(matched, function(idx) compute_dsge(idx, pool_z),
@@ -814,6 +963,11 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
                        numeric(1L))
     cv_obs   <- vapply(matched, function(idx) compute_cv(pool_z[idx]),
                        numeric(1L))
+  }
+  if (isTRUE(directional)) {
+    nds_obs <- vapply(matched, function(idx) {
+      compute_nds(pool_z[idx], pool_dir_raw[idx])   # raw log2FC for abs-ranking
+    }, numeric(1L))
   }
 
   # =========================================================================
@@ -1051,6 +1205,18 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
       result[, seq_len(dsge_pos), drop = FALSE],
       dsge_std = dsge_std_vals,
       result[, seq(dsge_pos + 1, ncol(result)), drop = FALSE],
+      stringsAsFactors = FALSE,
+      row.names = NULL
+    )
+  }
+  if (isTRUE(directional)) {
+    # Insert nds after dsge (or dsge_std), before p_value
+    nds_pos <- if (isTRUE(use_std)) which(names(result) == "dsge_std") + 1L
+               else which(names(result) == "dsge") + 1L
+    result <- data.frame(
+      result[, seq_len(nds_pos - 1L), drop = FALSE],
+      nds = nds_obs,
+      result[, seq(nds_pos, ncol(result)), drop = FALSE],
       stringsAsFactors = FALSE,
       row.names = NULL
     )
