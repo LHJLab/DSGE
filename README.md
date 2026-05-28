@@ -28,9 +28,8 @@ res <- read.csv("data_exp/CALN1_GABA_W6_DESeq2_addTPM.csv", stringsAsFactors = F
 res <- subset(res, geneType == "protein_coding" & geneName != ".")
 ```
 
-Required columns: `pvalue`, `baseMean`, `geneName` (column names can be adapted;
-`baseMean` can be any expression-level measure; pass `base_mean = NULL` to
-skip expression filtering).
+Required columns: `pvalue`, `geneName`; `baseMean` is optional (pass
+`base_mean = NULL` to skip expression filtering).
 
 ### 2. Read GAF annotations — `read_gaf()`
 
@@ -139,7 +138,7 @@ The core function. Computes DSGE for every pathway, generates size-grouped permu
 result <- pathway_dsge(
   pathway_genes    = pw,                      # from get_pathway_genes()
   pvalue           = res$pvalue,              # p-value column (any DE tool)
-  base_mean        = res$baseMean,            # mean expression column
+  base_mean        = res$baseMean,            # mean expression column (NULL to skip)
   gene_names       = res$geneName,            # gene symbols (match GAF gene_id_col)
   gene_id_col      = "db_object_symbol",      # column in pw to match gene_names against
   base_mean_cutoff = 0.1,                     # exclude genes with baseMean <= 0.1
@@ -150,11 +149,13 @@ result <- pathway_dsge(
   return_null      = TRUE,                    # keep null distributions for plot_dsge()
   progress         = TRUE,                    # show progress bars
   heterogeneity    = FALSE,                   # compute Gini, CV, and het_p (adds ~30% runtime)
+  directional      = FALSE,                   # compute NDS (Normalized Direction Score)
+  direction_vec    = NULL,                    # e.g. res$log2FoldChange, required when directional=TRUE
   use_std          = TRUE,                    # compute standardised DSGE (observed vs null)
-  use_gpd          = TRUE,                     # GPD tail extrapolation for extreme-value p-values
-  gpd_threshold    = 0.99,                     # GPD tail quantile threshold
-  gpd_method       = "mle",                    # GPD estimation method
-  n_cores          = 1                         # parallel cores (Linux/macOS only)
+  use_gpd          = TRUE,                    # GPD tail extrapolation for extreme-value p-values
+  gpd_threshold    = 0.99,                    # GPD tail quantile threshold
+  gpd_method       = "mle",                   # GPD estimation method
+  n_cores          = 1                        # parallel cores (Linux/macOS only)
 )
 
 result_tbl <- result$table    # data.frame, sorted by p_adj ascending
@@ -164,10 +165,10 @@ result_tbl <- result$table    # data.frame, sorted by p_adj ascending
 |-----------|---------|-------------|
 | `pathway_genes` | _(required)_ | Named list from `get_pathway_genes()` |
 | `pvalue` | _(required)_ | p-value vector from differential expression analysis (DESeq2, edgeR, Seurat, etc.) |
-| `base_mean` | _(required)_ | Mean expression vector (e.g., DESeq2 baseMean, Seurat avg_log2FC); pass NULL to skip filtering |
+| `base_mean` | `NULL` | Mean expression vector (e.g., DESeq2 baseMean); `NULL` skips expression filtering |
 | `gene_names` | _(required)_ | Gene symbols, must be unique |
 | `gene_id_col` | `"db_object_symbol"` | Column in pathway data.frames to match `gene_names` |
-| `base_mean_cutoff` | `0.1` | Exclude genes with baseMean at or below this value |
+| `base_mean_cutoff` | `0.1` | Exclude genes with baseMean at or below this value (ignored when `base_mean = NULL`) |
 | `n_replicates` | `NULL` | **[Deprecated]** No longer used; will be removed in a future version |
 | `min_size` | `5` | Minimum matched genes per pathway |
 | `max_size` | `500` | Maximum matched genes (set `Inf` to disable) |
@@ -176,13 +177,15 @@ result_tbl <- result$table    # data.frame, sorted by p_adj ascending
 | `return_null` | `FALSE` | If `TRUE`, return list with null distributions (needed for `plot_dsge`) |
 | `progress` | `TRUE` | Show progress bars during computation |
 | `heterogeneity` | `FALSE` | If `TRUE`, also compute Gini, CV, and heterogeneity p-values |
+| `directional` | `FALSE` | If `TRUE`, compute Normalized Direction Score (NDS) using `direction_vec` |
+| `direction_vec` | `NULL` | Numeric vector (e.g. log2FoldChange), same length as `pvalue`; required when `directional = TRUE` |
 | `use_std` | `TRUE` | If `TRUE`, compute `(observed - mean(null)) / sd(null)` and include `dsge_std` column |
 | `use_gpd` | `TRUE` | If `TRUE`, use GPD tail extrapolation with support-constrained adjustment (avoids p=0). If `FALSE`, always use empirical ECDF (p-values always >= 1/n_perm) |
 | `gpd_threshold` | `0.99` | Tail quantile threshold for GPD fitting. Lower = more tail samples (less variance, more bias); higher = fewer samples (more variance, less bias) |
 | `gpd_method` | `"mle"` | GPD estimation method passed to `POT::fitgpd`. Default `"mle"`. Also: `"mple"`, `"moments"`, `"pwmu"`, `"pwmb"`, `"mdpd"`, `"med"`, `"pickands"`, `"lme"`, `"mgf"` |
 | `n_cores` | `1` | Number of CPU cores for parallel null generation (Linux/macOS only, uses `parallel::mclapply`). Set to `parallel::detectCores()` to use all cores |
 
-Result columns: `go_id`, `go_name`, `aspect`, `n_pathway`, `n_matched`, `dsge`, `dsge_std`, `p_value`, `p_adj`. When `heterogeneity = TRUE`: also `gini`, `cv`, `het_p_value`, `het_p_adj`.
+Result columns: `go_id`, `go_name`, `aspect`, `n_pathway`, `n_matched`, `dsge`, `dsge_std` (if `use_std = TRUE`), `nds` (if `directional = TRUE`), `p_value`, `p_adj`. When `heterogeneity = TRUE`: also `gini`, `cv`, `het_p_value`, `het_p_adj`.
 
 ### 7. Inspect and save results
 
@@ -194,7 +197,7 @@ sum(result_tbl$p_adj < 0.05)
 table(result_tbl$aspect)    # BP / MF / CC
 
 # Top pathways
-head(result_tbl[, c("go_id", "go_name", "aspect", "n_matched", "dsge", "dsge_std", "p_adj")])
+head(result_tbl[, c("go_id", "go_name", "aspect", "n_matched", "dsge", "dsge_std", "nds", "p_adj")])
 
 # Save
 write.csv(result_tbl, "pathway_dsge_results.csv", row.names = FALSE)
@@ -248,25 +251,30 @@ test <- dsge_perm_test(
   seed             = 42,
   progress         = TRUE,
   heterogeneity    = FALSE,
+  directional      = FALSE,
+  direction_vec    = NULL,
   use_std          = TRUE,
   use_gpd          = TRUE
 )
 test$observed   # DSGE of the gene set
 test$p_value    # empirical right-tail p-value
 test$dsge_std   # standardised DSGE (if use_std = TRUE)
+test$nds        # Normalized Direction Score (if directional = TRUE)
 ```
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `gene_list` | _(required)_ | Character vector of gene symbols |
 | `pvalue` | _(required)_ | p-value vector from differential expression analysis |
-| `base_mean` | _(required)_ | Mean expression vector; pass NULL to skip filtering |
+| `base_mean` | `NULL` | Mean expression vector; `NULL` skips filtering |
 | `gene_names` | _(required)_ | Gene symbols matching those in `gene_list` |
-| `base_mean_cutoff` | `0.1` | Exclude genes with baseMean at or below this value |
+| `base_mean_cutoff` | `0.1` | Exclude genes with baseMean at or below this value (ignored when `base_mean = NULL`) |
 | `n_perm` | `10000` | Number of permutations |
 | `seed` | `NULL` | Random seed |
 | `progress` | `TRUE` | Show progress bar |
 | `heterogeneity` | `FALSE` | If `TRUE`, also compute Gini, CV, and het_p |
+| `directional` | `FALSE` | If `TRUE`, compute NDS using `direction_vec` |
+| `direction_vec` | `NULL` | Numeric vector (e.g. log2FoldChange), same length as `pvalue`; required when `directional = TRUE` |
 | `use_std` | `TRUE` | If `TRUE`, return `dsge_std = (observed - mean(null)) / sd(null)` |
 | `use_gpd` | `TRUE` | If `TRUE`, use GPD tail extrapolation with support-constrained adjustment (avoids p=0). If `FALSE`, empirical ECDF only (p always >= 1/n_perm) |
 | `gpd_threshold` | `0.99` | Tail quantile threshold for GPD fitting |
@@ -302,6 +310,8 @@ hist(dsge_res$z_scores, breaks = 100)   # per-gene z-score distribution
 **GPD tail extrapolation.** When `use_gpd = TRUE` (default), observed DSGE values above the `gpd_threshold` null percentile (default 0.99) get p-values from a fitted Generalized Pareto Distribution instead of direct counting — providing higher resolution for extreme observations. A **support-constrained adjustment** (Peschel et al. 2025, arXiv:2602.22975) is applied when the fitted GPD would otherwise produce p = 0 (due to a finite upper bound), ensuring a valid non-zero p-value while minimal deviation from the MLE. When set to `FALSE`, pure empirical ECDF is used (p-values always >= 1/n_perm, no risk of p = 0).
 
 **Perturbation heterogeneity.** Optional Gini + CV with two-sided permutation test. Low heterogeneity = uniform pathway-wide perturbation; high heterogeneity = selective targeting of a few key genes (driver vs. passenger pathway).
+
+**Directional analysis (NDS).** When a direction vector (e.g. log2FoldChange) is provided with `directional = TRUE`, the Normalized Direction Score `NDS = (U - D) / max(U, D)` quantifies whether a perturbed pathway is net up- or down-regulated, where U and D are mean z-scores of up- and down-regulated member genes. Range: -1 (all down) to +1 (all up). Descriptive metric — significance is determined by the DSGE p-value.
 
 ## Input Data Sources
 
