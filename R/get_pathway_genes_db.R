@@ -48,6 +48,12 @@
 #' @param evidence Evidence code filter (e.g. \code{"IDA"},
 #'   \code{"IEA"}). \code{NULL} (default) keeps all. Pass a character
 #'   vector to keep only annotations with those evidence codes.
+#' @param use_goall Logical. If \code{TRUE}, query the \code{GOALL}
+#'   column instead of \code{GO}, propagating gene annotations to all
+#'   ancestor terms along the GO directed acyclic graph. This produces
+#'   a broader pathway set consistent with \code{clusterProfiler}'s
+#'   \code{gseGO}/\code{enrichGO} default behaviour. Default
+#'   \code{FALSE} uses direct annotations only.
 #' @param attach_go_names Logical. Whether to fetch GO term names and
 #'   ontology classifications via \code{GO.db}. Default \code{TRUE}.
 #'   Requires the \code{GO.db} package to be installed.
@@ -87,7 +93,8 @@ get_pathway_genes_db <- function(orgdb,
                                   min_size         = 5L,
                                   aspect           = NULL,
                                   evidence         = NULL,
-                                  attach_go_names  = TRUE) {
+                                  attach_go_names  = TRUE,
+                                  use_goall        = FALSE) {
 
   # ---- Dependency checks ----
   if (!requireNamespace("AnnotationDbi", quietly = TRUE))
@@ -100,39 +107,40 @@ get_pathway_genes_db <- function(orgdb,
     stop("'orgdb' must be an OrgDb object (e.g. org.Hs.eg.db)", call. = FALSE)
 
   # ---- Get all GO annotations from the OrgDb ----
-  # select() with columns = c("GO", "SYMBOL") returns a data.frame
-  # with columns: keytype, SYMBOL, GO, EVIDENCE, ONTOLOGY
-  # Note: ONTOLOGY is a multi-column that comes with GO; it contains
-  # BP/MF/CC classification.
+  # When use_goall=FALSE: select() with "GO" returns keytype, SYMBOL,
+  #   GO, EVIDENCE, ONTOLOGY.
+  # When use_goall=TRUE:  select() with "GOALL" returns keytype,
+  #   SYMBOL, GOALL, EVIDENCEALL, ONTOLOGYALL — gene annotations are
+  #   propagated to all ancestor terms along the GO DAG, producing a
+  #   broader pathway set consistent with clusterProfiler's default.
+  go_col  <- if (use_goall) "GOALL"       else "GO"
+  evi_col <- if (use_goall) "EVIDENCEALL" else "EVIDENCE"
+  ont_col <- if (use_goall) "ONTOLOGYALL" else "ONTOLOGY"
+
   all_keys <- AnnotationDbi::keys(orgdb, keytype = keytype)
 
   go_data <- tryCatch(
     suppressWarnings(
       AnnotationDbi::select(orgdb,
                              keys    = all_keys,
-                             columns = c("GO", "SYMBOL", "EVIDENCE"),
+                             columns = c(go_col, "SYMBOL", evi_col),
                              keytype = keytype)
     ),
     error = function(e) {
-      # Some OrgDb objects may not have the exact columns requested
       go_data <- suppressWarnings(
         AnnotationDbi::select(orgdb,
                                keys    = all_keys,
-                               columns = c("GO", "SYMBOL"),
+                               columns = c(go_col, "SYMBOL"),
                                keytype = keytype)
       )
-      # Add empty EVIDENCE column (will be treated as keep-all)
-      go_data$EVIDENCE <- NA_character_
-      go_data$ONTOLOGY <- NA_character_
+      go_data[[evi_col]] <- NA_character_
+      go_data[[ont_col]] <- NA_character_
       go_data
     }
   )
 
   # ---- Clean up ----
-  # Remove rows where GO is NA (no GO annotation for that key)
-  go_data <- go_data[!is.na(go_data$GO), , drop = FALSE]
-
-  # Remove rows where SYMBOL is NA (can happen for some Entrez IDs)
+  go_data <- go_data[!is.na(go_data[[go_col]]), , drop = FALSE]
   go_data <- go_data[!is.na(go_data$SYMBOL), , drop = FALSE]
 
   if (nrow(go_data) == 0L)
@@ -141,9 +149,7 @@ get_pathway_genes_db <- function(orgdb,
 
   # ---- Filter by evidence code ----
   if (!is.null(evidence)) {
-    # EVIDENCE may be NA for some annotations; those are kept only if
-    # NA is explicitly included in the evidence filter
-    go_data <- go_data[go_data$EVIDENCE %in% evidence, , drop = FALSE]
+    go_data <- go_data[go_data[[evi_col]] %in% evidence, , drop = FALSE]
     if (nrow(go_data) == 0L)
       stop("No rows remain after evidence code filter", call. = FALSE)
   }
@@ -151,10 +157,8 @@ get_pathway_genes_db <- function(orgdb,
   # ---- Filter by ontology aspect ----
   if (!is.null(aspect)) {
     aspect <- match.arg(aspect, c("BP", "MF", "CC"), several.ok = TRUE)
-    # ONTOLOGY may be NA; filter only non-NA matches to avoid
-    # inadvertently keeping rows with missing ontology classification
-    go_data <- go_data[!is.na(go_data$ONTOLOGY) &
-                         go_data$ONTOLOGY %in% aspect, , drop = FALSE]
+    go_data <- go_data[!is.na(go_data[[ont_col]]) &
+                         go_data[[ont_col]] %in% aspect, , drop = FALSE]
     if (nrow(go_data) == 0L)
       stop("No rows remain after aspect filter", call. = FALSE)
   }
@@ -164,8 +168,7 @@ get_pathway_genes_db <- function(orgdb,
   cols <- colnames(go_data)
   cols[cols == key_col]       <- gene_id_col
   cols[cols == "SYMBOL"]      <- gene_symbol_col
-  cols[cols == "GO"]          <- "go_id"
-  # Drop EVIDENCE and ONTOLOGY — not needed in output
+  cols[cols == go_col]        <- "go_id"
   colnames(go_data) <- cols
 
   keep_cols <- intersect(c(gene_id_col, gene_symbol_col, "go_id"),
