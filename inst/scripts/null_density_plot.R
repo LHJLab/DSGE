@@ -23,12 +23,12 @@ source("R/get_pathway_genes.R")
 source("R/dsge.R")
 
 cat("Loading DESeq2 results...\n")
-res <- read.csv("data_exp/CALN1_GABA_W6_DESeq2_addTPM.csv", stringsAsFactors = FALSE)
-res <- subset(res, geneType == "protein_coding" & geneName != ".")
+res <- read.csv("E:/DSGE/inst/CML_GSE226360/limma_results/limma_FLT3_IR_vs_FLT3.csv", stringsAsFactors = FALSE)
+#res <- subset(res, geneType == "protein_coding" & geneName != ".")
 cat("  Protein-coding genes:", nrow(res), "\n")
 
 # ---- 从真实 DESeq2 结果构建 z 分数池 ----
-dsge_res <- calc_dsge(res$pvalue, res$baseMean, base_mean_cutoff = 0.1)
+dsge_res <- calc_dsge(res$pvalue)
 pool_z  <- dsge_res$z_scores
 n_pool  <- length(pool_z)
 
@@ -62,7 +62,7 @@ for (i in seq_along(SIZES)) {
   for (b in seq(1L, N_PERM, by = bat)) {
     nb <- min(bat, N_PERM - b + 1L)
     mat <- matrix(sample.int(n_pool, sz * nb, replace = FALSE), nrow = sz)
-    nul[b:(b + nb - 1L)] <- compute_dsge_batch(mat, pool_z, pool_N = NULL)
+    nul[b:(b + nb - 1L)] <- compute_dsge_batch(mat, pool_z)
   }
 
   d <- density(nul, bw = "SJ")
@@ -228,3 +228,4 @@ if (DO_RIDGE) {
 }
 
 cat("\nAll plots generated.\n")
+

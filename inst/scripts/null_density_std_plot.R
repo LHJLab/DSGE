@@ -20,18 +20,14 @@
 
 # ---- 0. 加载依赖 & 读取真实数据 ----
 cat("Loading dependencies...\n")
-source("R/read_gaf.R")
-source("R/read_obo.R")
-source("R/get_pathway_genes.R")
 source("R/dsge.R")
 
-cat("Loading DESeq2 results...\n")
-res <- read.csv("inst/data_exp/CALN1_GABA_W6_DESeq2_addTPM.csv", stringsAsFactors = FALSE)
-res <- subset(res, geneType == "protein_coding" & geneName != ".")
-cat("  Protein-coding genes:", nrow(res), "\n")
+cat("Loading limma results...\n")
+res <- read.csv("E:/DSGE/inst/CML_GSE226360/limma_results/limma_FLT3_IR_vs_FLT3.csv", stringsAsFactors = FALSE)
+cat("  Genes:", nrow(res), "\n")
 
-# ---- 从真实 DESeq2 结果构建 z 分数池 ----
-dsge_res <- calc_dsge(res$pvalue, res$baseMean, base_mean_cutoff = 0.1)
+# ---- 从真实 limma 结果构建 z 分数池 ----
+dsge_res <- calc_dsge(res$pvalue)
 pool_z  <- dsge_res$z_scores
 n_pool  <- length(pool_z)
 
@@ -40,7 +36,7 @@ cat(sprintf("Background gene pool: n=%d, mean(z)=%.4f, sd(z)=%.4f\n",
 
 # ---- 1. 参数 ----
 set.seed(666)
-N_PERM     <- 10000L                          # 排列次数
+N_PERM     <- 100000L                          # 排列次数
 SIZES      <- seq(5, 500, by = 5)             # 通路大小序列
 SHOW_SIZES <- c(5, 10, 25, 50, 100, 200, 500) # 面板 A 展示的代表性大小
 
@@ -67,7 +63,7 @@ for (i in seq_along(SIZES)) {
   for (b in seq(1L, N_PERM, by = bat)) {
     nb <- min(bat, N_PERM - b + 1L)
     mat <- matrix(sample.int(n_pool, sz * nb, replace = FALSE), nrow = sz)
-    nul[b:(b + nb - 1L)] <- compute_dsge_batch(mat, pool_z, pool_N = NULL)
+    nul[b:(b + nb - 1L)] <- compute_dsge_batch(mat, pool_z)
   }
 
   null_means[i]    <- mean(nul)
