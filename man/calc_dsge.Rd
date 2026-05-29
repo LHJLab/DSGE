@@ -4,12 +4,7 @@
 \alias{calc_dsge}
 \title{Compute DSGE (Disruption Score of Gene Expression)}
 \usage{
-calc_dsge(
-  pvalue,
-  base_mean = NULL,
-  base_mean_cutoff = 0.1,
-  n_replicates = NULL
-)
+calc_dsge(pvalue, base_mean = NULL, base_mean_cutoff = 0.1)
 }
 \arguments{
 \item{pvalue}{Numeric vector of p-values from differential expression
@@ -23,10 +18,6 @@ is applied.}
 \item{base_mean_cutoff}{Expression filter threshold, default 0.1.
 Genes with mean expression at or below this value are excluded as
 lowly expressed. Ignored when base_mean = NULL.}
-
-\item{n_replicates}{\strong{[Deprecated]}. This parameter is no longer
-used and will be removed in a future version. Unweighted DSGE is
-used regardless of its value.}
 }
 \value{
 A list with elements:

@@ -11,12 +11,15 @@ plot_dsge_volcano(
   go_id,
   logFC_col = "log2FoldChange",
   pval_col = "pvalue",
+  padj_col = NULL,
   gene_col = "geneName",
   gene_id_col = "db_object_symbol",
   threshold = 0.05,
+  padj_threshold = 0.05,
   lfc_threshold = NULL,
   color_up = "#CC3333",
   color_down = "#3366CC",
+  color_nom = "#CC9933",
   color_ns = "#AAAAAA",
   alpha_sig = 0.9,
   alpha_ns = 0.5,
@@ -55,6 +58,12 @@ Default \code{"log2FoldChange"}.}
 \item{pval_col}{Column name in \code{de_results} for the p-value
 (raw or adjusted). Default \code{"pvalue"}.}
 
+\item{padj_col}{Optional column name in \code{de_results} for adjusted
+p-values (e.g. \code{"padj"}). When provided, points are classified
+as adjusted-significant using \code{padj_threshold}, and an
+additional "Nominal" category appears in the legend. Default
+\code{NULL} (uses \code{threshold} only).}
+
 \item{gene_col}{Column name in \code{de_results} for gene identifiers
 that match the pathway mapping. Default \code{"geneName"}.}
 
@@ -64,6 +73,10 @@ holds the gene identifiers. Default \code{"db_object_symbol"}.}
 \item{threshold}{p-value significance threshold for the horizontal
 reference line. Default \code{0.05}.}
 
+\item{padj_threshold}{Adjusted p-value threshold for significance
+classification. Default \code{0.05}. Only used when
+\code{padj_col} is provided.}
+
 \item{lfc_threshold}{Numeric vector of logFC thresholds for vertical
 reference lines (e.g. \code{c(-1, 1)}). Default \code{NULL}.}
 
@@ -72,6 +85,11 @@ Default \code{"#CC3333"}.}
 
 \item{color_down}{Color for significantly down-regulated genes.
 Default \code{"#3366CC"}.}
+
+\item{color_nom}{Color for nominally significant genes (raw p-value
+below \code{threshold} but adjusted p-value above
+\code{padj_threshold}). Default \code{"#CC9933"}. Only used when
+\code{padj_col} is provided.}
 
 \item{color_ns}{Color for non-significant genes.
 Default \code{"#AAAAAA"}.}

@@ -7,11 +7,10 @@
 pathway_dsge(
   pathway_genes,
   pvalue,
-  base_mean,
+  base_mean = NULL,
   gene_names,
   gene_id_col = "db_object_symbol",
   base_mean_cutoff = 0.1,
-  n_replicates = NULL,
   min_size = 5L,
   max_size = 500L,
   n_perm = 10000L,
@@ -19,9 +18,11 @@ pathway_dsge(
   return_null = FALSE,
   progress = TRUE,
   heterogeneity = FALSE,
+  directional = FALSE,
+  direction_vec = NULL,
   use_std = TRUE,
   use_gpd = TRUE,
-  gpd_threshold = 0.9,
+  gpd_threshold = 0.99,
   gpd_method = "mle",
   safety_margin = 1.05,
   n_cores = 1L,
@@ -48,10 +49,6 @@ match gene names, default \code{"db_object_symbol"}.}
 
 \item{base_mean_cutoff}{baseMean filter threshold, default 0.1.}
 
-\item{n_replicates}{\strong{[Deprecated]}. This parameter is no longer
-used and will be removed in a future version. Unweighted DSGE
-(mean of z-scores) is used regardless of its value.}
-
 \item{min_size}{Minimum number of matched genes; pathways below this
 are not tested. Default 5.}
 
@@ -75,6 +72,19 @@ distribution generation, increasing runtime by approximately
 30\%-50\%. The result data.frame will include extra columns
 \code{gini}, \code{cv}, \code{het_p_value}, \code{het_p_adj}.}
 
+\item{directional}{Whether to compute Normalized Direction Score
+(NDS) for each pathway. Default \code{FALSE}. When \code{TRUE},
+\code{direction_vec} must be provided. NDS ranges from -1 to 1:
+positive values indicate net up-regulation, negative values net
+down-regulation. The result data.frame will include an
+\code{nds} column.}
+
+\item{direction_vec}{Numeric vector of direction indicators
+(e.g., log fold changes), same length as \code{pvalue}. Used to
+classify genes as up-regulated (positive direction) or
+down-regulated (negative direction). Values of exactly 0 are
+treated as up-regulated. Ignored when \code{directional = FALSE}.}
+
 \item{use_std}{Whether to compute and use standardised DSGE.
 Default \code{TRUE}. When enabled:
 \itemize{
@@ -86,7 +96,7 @@ Default \code{TRUE}. When enabled:
         without GPD tail extrapolation.
 }
 When \code{FALSE}, p-values are computed from the raw null
-distribution with GPD tail extrapolation.}
+distribution (using GPD when \code{use_gpd = TRUE}).}
 
 \item{use_gpd}{Whether to use GPD tail extrapolation for extreme
 p-values. Default \code{TRUE}. When \code{TRUE} and the observed
@@ -135,6 +145,9 @@ By default, a \code{data.frame} sorted by \code{p_adj}
   When \code{heterogeneity = TRUE}, additionally includes:
   \code{gini}, \code{cv}, \code{het_p_value}, \code{het_p_adj}.
 
+  When \code{directional = TRUE}, additionally includes:
+  \code{nds} (Normalized Direction Score, ranging from -1 to +1).
+
   When \code{use_std = TRUE} (default), additionally includes:
   \code{dsge_std} = (observed DSGE - mean(null)) / sd(null),
   standardised using the size-grouped null distribution.
@@ -172,11 +185,11 @@ null distribution, greatly reducing computation.
         the gene pool via the \code{gene_id_col} column.
   \item \strong{Filter pathways}: retain pathways with
         \code{min_size <= n_matched <= max_size}.
-  \item \strong{Compute observed DSGE}: per pathway using the NormZ
-        formula: DSGE = sum(N*z) / [G * sqrt(sum(N^2))].
+  \item \strong{Compute observed DSGE}: per pathway as the mean of
+        member gene z-scores: DSGE = mean(z_i).
   \item \strong{Generate size-grouped null distributions}: each unique
         matched-gene count gets its own permutation run (vectorized
-        batch sampling) using the same NormZ formula, with
+        batch sampling), with
         simultaneous GPD tail fitting.
   \item \strong{Compute standardised DSGE} (step 6): when
         \code{use_std = TRUE}, compute \code{dsge_std = (observed -

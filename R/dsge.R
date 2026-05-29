@@ -8,6 +8,8 @@
 #      (|z-score|); larger z means stronger transcriptional perturbation.
 #   2. For each GO pathway (gene set), compute the mean of member gene
 #      z-scores as the pathway DSGE.
+#' @useDynLib DSGE, .registration = TRUE
+#' @importFrom Rcpp evalCpp
 #   3. Generate null distributions via permutation test: randomly draw
 #      equally-sized gene sets from the background pool, compute random
 #      DSGE, repeat n times.
@@ -1024,37 +1026,26 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
       cat("Generating null distributions for", length(sizes),
           "unique sizes using", n_cores_effective, "cores\n")
 
-    has_seed <- !is.null(seed)
+    seed_base <- if (is.null(seed)) -1L else seed
     results <- suppressWarnings(
       parallel::mclapply(seq_along(sizes), function(s) {
-      if (has_seed) set.seed(seed + s)       # deterministic per-size RNG stream
+      suppressMessages(library(POT))   # forestall S3 registration noise
       sz  <- sizes[s]
-      bat <- max(1L, floor(n_pool / sz))
-      nul <- numeric(n_perm)
-      nul_gini <- nul_cv <- NULL
-      if (heterogeneity) {
-        nul_gini <- numeric(n_perm)
-        nul_cv   <- numeric(n_perm)
-      }
-      for (b in seq(1L, n_perm, by = bat)) {
-        nb <- min(bat, n_perm - b + 1L)
-        mat <- matrix(sample.int(n_pool, sz * nb, replace = FALSE), nrow = sz)
-        nul[b:(b + nb - 1L)] <- compute_dsge_batch(mat, pool_z)
-        if (heterogeneity) {
-          nul_gini[b:(b + nb - 1L)] <- compute_gini_batch(mat, pool_z)
-          nul_cv[b:(b + nb - 1L)]   <- compute_cv_batch(mat, pool_z)
-        }
-      }
+      res <- permute_null_cpp(pool_z, sz, n_perm,
+                              seed_base + s,
+                              compute_gini = heterogeneity,
+                              compute_cv   = heterogeneity)
       gpd_obj <- gpd_std_obj <- NULL
       if (isTRUE(use_gpd)) {
-        gpd_obj <- fit_gpd_tail(nul, tail = gpd_threshold, gpd_method = gpd_method)
+        gpd_obj <- fit_gpd_tail(res$null, tail = gpd_threshold, gpd_method = gpd_method)
         if (isTRUE(use_std)) {
-          nul_std <- (nul - mean(nul)) / sd(nul)
+          nul_std <- (res$null - mean(res$null)) / sd(res$null)
           gpd_std_obj <- fit_gpd_tail(nul_std, tail = gpd_threshold, gpd_method = gpd_method)
         }
       }
-      list(null = nul, null_gpd = gpd_obj, null_gpd_std = gpd_std_obj,
-           null_gini = nul_gini, null_cv = nul_cv)
+      list(null = res$null, null_gpd = gpd_obj, null_gpd_std = gpd_std_obj,
+           null_gini = if (heterogeneity) res$null_gini else NULL,
+           null_cv   = if (heterogeneity) res$null_cv   else NULL)
     }, mc.cores = n_cores_effective, mc.preschedule = TRUE)
     )  # suppressWarnings
 
@@ -1078,36 +1069,26 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
       pb <- utils::txtProgressBar(min = 0, max = length(sizes), style = 3)
     }
 
+    seed_base <- if (is.null(seed)) -1L else seed
+
     for (s in seq_along(sizes)) {
       sz  <- sizes[s]
-      bat <- max(1L, floor(n_pool / sz))
-      nul <- numeric(n_perm)
-      if (heterogeneity) {
-        nul_gini <- numeric(n_perm)
-        nul_cv   <- numeric(n_perm)
-      }
+      res <- permute_null_cpp(pool_z, sz, n_perm,
+                              seed_base + s,
+                              compute_gini = heterogeneity,
+                              compute_cv   = heterogeneity)
 
-      for (b in seq(1L, n_perm, by = bat)) {
-        nb <- min(bat, n_perm - b + 1L)
-        mat <- matrix(sample.int(n_pool, sz * nb, replace = FALSE), nrow = sz)
-        nul[b:(b + nb - 1L)] <- compute_dsge_batch(mat, pool_z)
-        if (heterogeneity) {
-          nul_gini[b:(b + nb - 1L)] <- compute_gini_batch(mat, pool_z)
-          nul_cv[b:(b + nb - 1L)]   <- compute_cv_batch(mat, pool_z)
-        }
-      }
-
-      null_raw[[s]] <- nul
+      null_raw[[s]] <- res$null
       if (isTRUE(use_gpd)) {
-        null_gpd[[s]] <- fit_gpd_tail(nul, tail = gpd_threshold, gpd_method = gpd_method)
+        null_gpd[[s]] <- fit_gpd_tail(res$null, tail = gpd_threshold, gpd_method = gpd_method)
         if (isTRUE(use_std)) {
-          nul_std <- (nul - mean(nul)) / sd(nul)
+          nul_std <- (res$null - mean(res$null)) / sd(res$null)
           null_gpd_std[[s]] <- fit_gpd_tail(nul_std, tail = gpd_threshold, gpd_method = gpd_method)
         }
       }
       if (heterogeneity) {
-        null_gini_raw[[s]] <- nul_gini
-        null_cv_raw[[s]]   <- nul_cv
+        null_gini_raw[[s]] <- res$null_gini
+        null_cv_raw[[s]]   <- res$null_cv
       }
       if (progress) utils::setTxtProgressBar(pb, s)
     }

@@ -10,14 +10,15 @@ dsge_perm_test(
   base_mean,
   gene_names,
   base_mean_cutoff = 0.1,
-  n_replicates = NULL,
   n_perm = 10000L,
   seed = NULL,
   progress = TRUE,
   heterogeneity = FALSE,
+  directional = FALSE,
+  direction_vec = NULL,
   use_std = TRUE,
   use_gpd = TRUE,
-  gpd_threshold = 0.9,
+  gpd_threshold = 0.99,
   gpd_method = "mle",
   safety_margin = 1.05
 )
@@ -38,10 +39,6 @@ pvalue, must be unique.}
 
 \item{base_mean_cutoff}{baseMean filter threshold, default 0.1.}
 
-\item{n_replicates}{\strong{[Deprecated]}. This parameter is no longer
-used and will be removed in a future version. Unweighted DSGE
-(mean of z-scores) is used regardless of its value.}
-
 \item{n_perm}{Number of permutations, default 10000.}
 
 \item{seed}{Optional integer random seed for reproducibility.}
@@ -53,6 +50,19 @@ indices (Gini, CV) and two-sided p-values. Default \code{FALSE}.
 When enabled, also computes Gini and CV null distributions within
 the permutation loop, increasing runtime by approximately
 30\%-50\%.}
+
+\item{directional}{Whether to compute Normalized Direction Score
+(NDS) for each pathway. Default \code{FALSE}. When \code{TRUE},
+\code{direction_vec} must be provided. NDS ranges from -1 to 1:
+positive values indicate net up-regulation, negative values net
+down-regulation. Requires \code{use_gpd = TRUE} (default) for
+reliable extreme p-values alongside directional information.}
+
+\item{direction_vec}{Numeric vector of direction indicators
+(e.g., log fold changes), same length as \code{pvalue}. Used to
+classify genes as up-regulated (positive direction) or
+down-regulated (negative direction). Values of exactly 0 are
+treated as up-regulated. Ignored when \code{directional = FALSE}.}
 
 \item{use_std}{Whether to compute and use standardised DSGE.
 Default \code{TRUE}. When enabled:
@@ -99,6 +109,8 @@ A list with elements:
         observed falls above 90th percentile; empirical ECDF otherwise)}
   \item{ecdf}{empirical cumulative distribution function of the null}
   \item{dsge_std}{(only when \code{use_std = TRUE}) standardised DSGE}
+  \item{nds}{(only when \code{directional = TRUE}) Normalized
+        Direction Score, ranging from -1 (pure down) to +1 (pure up)}
   \item{gini_observed}{(only when \code{heterogeneity = TRUE}) observed Gini coefficient}
   \item{cv_observed}{(only when \code{heterogeneity = TRUE}) observed CV}
   \item{null_gini}{(only when \code{heterogeneity = TRUE}) Gini null distribution vector}
@@ -116,10 +128,10 @@ Algorithm steps:
   \item Filter gene pool: baseMean > cutoff, non-missing p-value.
   \item Convert p-values to per-gene raw z-scores.
   \item Match \code{gene_list} to the filtered gene pool; compute
-        observed DSGE using the NormZ formula.
+        observed DSGE (mean z-score).
   \item Generate null distribution: randomly sample (without
         replacement) equally-sized gene sets from the pool,
-        computing random DSGE via the same NormZ formula, repeated
+        computing random DSGE via the same mean z-score formula, repeated
         n_perm times.
   \item Empirical right-tail p-value: count(DSGE_null > DSGE_obs) / n_perm.
 }

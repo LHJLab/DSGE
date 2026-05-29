@@ -12,7 +12,8 @@ get_pathway_genes_db(
   min_size = 5L,
   aspect = NULL,
   evidence = NULL,
-  attach_go_names = TRUE
+  attach_go_names = TRUE,
+  use_goall = FALSE
 )
 }
 \arguments{
@@ -47,6 +48,13 @@ vector to keep only annotations with those evidence codes.}
 \item{attach_go_names}{Logical. Whether to fetch GO term names and
 ontology classifications via \code{GO.db}. Default \code{TRUE}.
 Requires the \code{GO.db} package to be installed.}
+
+\item{use_goall}{Logical. If \code{TRUE}, query the \code{GOALL}
+column instead of \code{GO}, propagating gene annotations to all
+ancestor terms along the GO directed acyclic graph. This produces
+a broader pathway set consistent with \code{clusterProfiler}'s
+\code{gseGO}/\code{enrichGO} default behaviour. Default
+\code{FALSE} uses direct annotations only.}
 }
 \value{
 A named list where each element is a \code{data.frame} with

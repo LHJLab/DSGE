@@ -15,7 +15,10 @@ Imports:
     data.table,
     evd,
     methods,
-    POT
+    POT,
+    Rcpp
+LinkingTo:
+    Rcpp
 Suggests:
     AnnotationDbi,
     GO.db
