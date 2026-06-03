@@ -786,6 +786,14 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'   when multiple unique pathway sizes exist). On Windows, falls
 #'   back to sequential with a message.
 #' @param dsge_std \strong{[Deprecated]}. Use \code{use_std} instead.
+#' @param p_adjust_method Multiple testing correction method. Passed to
+#'   \code{stats::p.adjust()}. Default \code{"BY"} (Benjamini-Yekutieli)
+#'   which controls FDR under arbitrary dependence. Use \code{"BH"} for
+#'   the standard Benjamini-Hochberg (assumes independence or positive
+#'   dependence). All methods supported by \code{p.adjust} are valid:
+#'   \code{"holm"}, \code{"hochberg"}, \code{"hommel"},
+#'   \code{"bonferroni"}, \code{"BH"}, \code{"BY"}, \code{"fdr"},
+#'   \code{"none"}.
 #'
 #' @return By default, a \code{data.frame} sorted by \code{p_adj}
 #'   ascending, with columns:
@@ -850,7 +858,8 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
                          gpd_method        = "mle",
                          safety_margin     = 1.05,
                          n_cores           = 1L,
-                         dsge_std          = NULL) {
+                         dsge_std          = NULL,
+                         p_adjust_method   = "BY") {
   # ---- Backward compatibility: dsge_std → use_std ----
   if (!is.null(dsge_std)) {
     warning("'dsge_std' is deprecated; use 'use_std' instead", call. = FALSE)
@@ -864,6 +873,9 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   stopifnot(length(pvalue) == length(gene_names))
   stopifnot(is.character(gene_id_col), length(gene_id_col) == 1L)
   stopifnot(min_size >= 1L, n_perm >= 1L)
+  p_adjust_method <- match.arg(p_adjust_method,
+                               c("holm", "hochberg", "hommel",
+                                 "bonferroni", "BH", "BY", "fdr", "none"))
   if (isTRUE(directional)) {
     stopifnot("'direction_vec' must be provided when directional = TRUE" =
                 !is.null(direction_vec))
@@ -1167,11 +1179,11 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   }
 
   # =========================================================================
-  # Step 8: Benjamini-Hochberg FDR correction
+  # Step 8: Multiple testing correction
   # =========================================================================
-  p_adj <- stats::p.adjust(p_val, method = "BH")
+  p_adj <- stats::p.adjust(p_val, method = p_adjust_method)
   if (heterogeneity)
-    het_p_adj <- stats::p.adjust(het_p, method = "BH")
+    het_p_adj <- stats::p.adjust(het_p, method = p_adjust_method)
 
   # =========================================================================
   # Step 9: Assemble results, sorted by p_adj ascending
