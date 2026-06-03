@@ -1,8 +1,8 @@
 Package: DSGE
 Type: Package
-Title: Disruption Score of Gene Expression -- Pathway-Level
+Title:  -- Pathway-Level
     Transcriptional Disruption Analysis
-Version: 1.1.0
+Version: 1.2.0
 Authors@R: person("LHJLab", role = c("aut", "cre"),
     email = "lihuijuan@xzhmu.edu.cn")
 Description: Computes pathway-level transcriptional disruption scores
