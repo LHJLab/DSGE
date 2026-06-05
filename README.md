@@ -155,7 +155,10 @@ result <- pathway_dsge(
   use_gpd          = TRUE,                    # GPD tail extrapolation for extreme-value p-values
   gpd_threshold    = 0.99,                    # GPD tail quantile threshold
   gpd_method       = "mle",                   # GPD estimation method
-  n_cores          = 1                        # parallel cores (Linux/macOS only)
+  n_cores          = 1,                       # parallel cores (Linux/macOS only)
+  vif_correction   = FALSE,                   # VIF correction for inter-gene correlation
+  expr_matrix      = NULL,                    # expression matrix (genes x samples), required when vif_correction=TRUE
+  design           = NULL                     # design matrix (samples x variables), optional for QR-based VIF
 )
 
 result_tbl <- result$table    # data.frame, sorted by p_adj ascending
@@ -184,8 +187,12 @@ result_tbl <- result$table    # data.frame, sorted by p_adj ascending
 | `gpd_threshold` | `0.99` | Tail quantile threshold for GPD fitting. Lower = more tail samples (less variance, more bias); higher = fewer samples (more variance, less bias) |
 | `gpd_method` | `"mle"` | GPD estimation method passed to `POT::fitgpd`. Default `"mle"`. Also: `"mple"`, `"moments"`, `"pwmu"`, `"pwmb"`, `"mdpd"`, `"med"`, `"pickands"`, `"lme"`, `"mgf"` |
 | `n_cores` | `1` | Number of CPU cores for parallel null generation (Linux/macOS only, uses `parallel::mclapply`). Set to `parallel::detectCores()` to use all cores |
+| `vif_correction` | `FALSE` | If `TRUE`, perform Variance Inflation Factor correction for inter-gene correlation within pathways. Requires `expr_matrix`. When `design` is also provided, uses QR decomposition (CAMERA-style) for cleaner residual-based estimates |
+| `expr_matrix` | `NULL` | Numeric expression matrix (genes × samples, rownames = gene names). Required when `vif_correction = TRUE`. Typically log2-transformed normalized counts |
+| `design` | `NULL` | Design matrix (samples × variables) from `model.matrix()`. Optional; when provided with `vif_correction = TRUE`, VIF is estimated via QR decomposition residuals |
 
 Result columns: `go_id`, `go_name`, `aspect`, `n_pathway`, `n_matched`, `dsge`, `dsge_std` (if `use_std = TRUE`), `nds` (if `directional = TRUE`), `p_value`, `p_adj`. When `heterogeneity = TRUE`: also `gini`, `cv`, `het_p_value`, `het_p_adj`.
+When `vif_correction = TRUE`: also `dsge_adj`, `vif`, `rho_bar`.
 
 ### 7. Inspect and save results
 
@@ -201,6 +208,15 @@ head(result_tbl[, c("go_id", "go_name", "aspect", "n_matched", "dsge", "dsge_std
 
 # Save
 write.csv(result_tbl, "pathway_dsge_results.csv", row.names = FALSE)
+
+# With VIF correction (recommended when expression data is available)
+design <- model.matrix(~ treatment, data = colData(dds))
+result_vif <- pathway_dsge(pw, res$pvalue, res$baseMean, rownames(res),
+                           seed = 42,
+                           vif_correction = TRUE,
+                           expr_matrix    = log2(counts(dds, normalized = TRUE) + 1),
+                           design         = design)
+head(result_vif$table[, c("go_id", "go_name", "n_matched", "dsge", "dsge_adj", "vif", "p_adj")])
 ```
 
 ### 8. Plot null distributions — `plot_dsge()`
@@ -254,7 +270,12 @@ test <- dsge_perm_test(
   directional      = FALSE,
   direction_vec    = NULL,
   use_std          = TRUE,
-  use_gpd          = TRUE
+  use_gpd          = TRUE,
+  gpd_threshold    = 0.99,
+  gpd_method       = "mle",
+  vif_correction   = FALSE,
+  expr_matrix      = NULL,
+  design           = NULL
 )
 test$observed   # DSGE of the gene set
 test$p_value    # empirical right-tail p-value
@@ -279,6 +300,11 @@ test$nds        # Normalized Direction Score (if directional = TRUE)
 | `use_gpd` | `TRUE` | If `TRUE`, use GPD tail extrapolation with support-constrained adjustment (avoids p=0). If `FALSE`, empirical ECDF only (p always >= 1/n_perm) |
 | `gpd_threshold` | `0.99` | Tail quantile threshold for GPD fitting |
 | `gpd_method` | `"mle"` | GPD estimation method passed to `POT::fitgpd`. Default `"mle"`. Also: `"mple"`, `"moments"`, `"pwmu"`, `"pwmb"`, `"mdpd"`, `"med"`, `"pickands"`, `"lme"`, `"mgf"` |
+| `vif_correction` | `FALSE` | If `TRUE`, perform VIF correction for inter-gene correlation. Requires `expr_matrix` |
+| `expr_matrix` | `NULL` | Expression matrix (genes × samples), required when `vif_correction = TRUE` |
+| `design` | `NULL` | Design matrix (samples × variables) for QR-based VIF estimation; optional |
+
+Return list additions when `vif_correction = TRUE` (always included, default to 1/0 when disabled): `vif` (Variance Inflation Factor), `rho_bar` (average pairwise correlation), `dsge_adj` (VIF-corrected DSGE).
 
 ### 10. Genome-wide summary — `calc_dsge()`
 
@@ -304,6 +330,17 @@ hist(dsge_res$z_scores, breaks = 100)   # per-gene z-score distribution
 ## Key Concepts
 
 **DSGE formula.** `z_i = |Φ⁻¹(1 - p_i/2)|`; pathway DSGE = `mean(z_i)` (unweighted mean of absolute z-scores).
+
+**VIF correction.** When `vif_correction = TRUE`, the Variance Inflation Factor (VIF) accounts for inter-gene correlation within pathways. Correlated genes inflate the variance of observed DSGE relative to the independent-sampling permutation null, producing anti-conservative p-values. VIF correction shrinks the observed DSGE to match the null variance:
+
+- `dsge_adj = (observed - μ_null) / √VIF + μ_null` (raw scale)
+- `dsge_std_adj = dsge_std / √VIF` (standardised scale)
+
+where `VIF = 1 + (n - 1) · ρ̄` and `ρ̄` is the average pairwise inter-gene correlation.
+
+Two estimation modes:
+- **QR decomposition (recommended)**: When a `design` matrix is provided, projects expression data into the residual space via `qr.qty()` (CAMERA-style, Wu & Smyth 2012), excluding treatment effects from the correlation estimate.
+- **Pairwise Pearson (fallback)**: When only `expr_matrix` is provided, estimates `ρ̄` directly from pairwise Pearson correlations of the raw expression values. This is more conservative as it includes treatment-induced correlations.
 
 **Size-grouped permutation.** Pathways sharing the same matched-gene count reuse one null distribution, reducing computation from `K × n_perm` to `|sizes| × n_perm`.
 
