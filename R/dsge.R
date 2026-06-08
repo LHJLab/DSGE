@@ -182,15 +182,23 @@ eval_gpd_p <- function(fit, obs, safety_margin = 1.2) {
                             shape = fit$shape, lower.tail = FALSE)
 
   # ---- Support-constrained adjustment (arXiv:2602.22975) ----
-  # When pgpd returns 0 (either because obs exceeds the GPD finite upper
-  # bound when ξ < 0, or due to numerical underflow), we adjust the shape
-  # parameter so the new upper bound = obs + (safety-1) × (obs - u),
-  # guaranteeing a non-zero p-value for all pathways equally.
-  if (isTRUE(p == 0)) {
-    shape_adj <- -fit$scale / ((obs - fit$u) * safety_margin)
-    if (isTRUE(shape_adj < 0)) {
-      p <- fit$pat * evd::pgpd(obs - fit$u, scale = fit$scale,
-                                shape = shape_adj, lower.tail = FALSE)
+  # When the unconstrained GPD has ξ < 0, the distribution has a finite
+  # upper bound: u - σ/ξ. If the observed DSGE exceeds this bound,
+  # pgpd returns 0. This is statistically correct but practically
+  # undesirable (loses all resolution for extreme pathways).
+  #
+  # Following Peschel et al., we adjust the shape parameter ξ upward
+  # to the minimum value that places the upper bound strictly above the
+  # observed value, with a safety_margin × 100 % margin.
+  # Larger safety_margin → larger adjusted p-value (more conservative).
+  # safety_margin = 2.0 means upper bound = 2 × obs (100 % margin).
+  if (isTRUE(p == 0) && isTRUE(fit$shape < 0)) {
+    if (obs > fit$u - fit$scale / fit$shape) {
+      shape_adj <- -fit$scale / ((obs - fit$u) * safety_margin)
+      if (isTRUE(shape_adj < 0) && isTRUE(shape_adj > fit$shape)) {
+        p <- fit$pat * evd::pgpd(obs - fit$u, scale  = fit$scale,
+                                  shape = shape_adj, lower.tail = FALSE)
+      }
     }
   }
 
@@ -410,15 +418,12 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
 #'   \item Filter gene pool: baseMean > cutoff, non-missing p-value.
 #'   \item Convert p-values to per-gene raw z-scores.
 #'   \item Match \code{gene_list} to the filtered gene pool; compute
-#'         observed DSGE (mean z-score). If \code{vif_correction = TRUE},
-#'         estimate VIF from the expression matrix and apply it to
-#'         shrink the observed DSGE before computing the p-value.
+#'         observed DSGE (mean z-score).
 #'   \item Generate null distribution: randomly sample (without
 #'         replacement) equally-sized gene sets from the pool,
 #'         computing random DSGE via the same mean z-score formula, repeated
 #'         n_perm times.
-#'   \item Empirical right-tail p-value: count(DSGE_null > DSGE_obs) / n_perm,
-#'         or GPD tail extrapolation when \code{use_gpd = TRUE}.
+#'   \item Empirical right-tail p-value: count(DSGE_null > DSGE_obs) / n_perm.
 #' }
 #'
 #' @param gene_list Character vector of target gene identifiers
@@ -478,34 +483,9 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
 #'   \code{"pwmb"}, \code{"mdpd"}, \code{"med"}, \code{"pickands"},
 #'   \code{"lme"}, \code{"mgf"}.
 #' @param safety_margin Safety margin for GPD support-constrained adjustment.
-#'   Default \code{1.2}. Larger values produce more conservative p-values.
-#' @param vif_correction Whether to perform Variance Inflation Factor
-#'   correction for inter-gene correlation within the gene set. Default
-#'   \code{FALSE}. When \code{TRUE}, \code{expr_matrix} must be provided.
-#'   Inter-gene correlation inflates the variance of observed DSGE
-#'   relative to the permutation null; VIF correction shrinks the
-#'   observed DSGE accordingly, yielding a more conservative p-value.
-#'   When a \code{design} matrix is provided, uses QR decomposition
-#'   (CAMERA-style) to estimate residual-based correlations; otherwise
-#'   falls back to pairwise Pearson on the raw expression matrix.
-#'   The returned list will include \code{vif}, \code{rho_bar}, and
-#'   \code{dsge_adj}.
-#' @param expr_matrix Numeric expression matrix (genes \eqn{\times}
-#'   samples). Required when \code{vif_correction = TRUE}. Row names
-#'   must be gene names matching \code{gene_names}. Column names are
-#'   ignored but should match \code{design} row names when provided.
-#'   Typically log2-transformed normalized counts (log2TPM, log2FPKM,
-#'   or vst/rlog from DESeq2).
-#' @param design Numeric design matrix (samples \eqn{\times} variables)
-#'   encoding the experimental design, typically created by
-#'   \code{model.matrix()}. Optional; only used when
-#'   \code{vif_correction = TRUE}. When provided, VIF is estimated via
-#'   QR decomposition of the design matrix (CAMERA-style, Wu & Smyth
-#'   2012), yielding a cleaner residual-based estimate of inter-gene
-#'   correlation that excludes treatment effects. When omitted, VIF is
-#'   estimated via pairwise Pearson correlation on the raw expression
-#'   matrix (more conservative, as it includes treatment-induced
-#'   correlations).
+#'   Default \code{1.05} (5 % margin). Larger values (e.g., \code{2}) produce
+#'   larger (more conservative) p-values for extremely extreme observations,
+#'   avoiding double-precision underflow to zero at the cost of increased bias.
 #'
 #' @return A list with elements:
 #'   \item{observed}{observed DSGE value}
@@ -514,17 +494,7 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
 #'   \item{p_value}{right-tail p-value (GPD tail extrapolation when
 #'         observed falls above 90th percentile; empirical ECDF otherwise)}
 #'   \item{ecdf}{empirical cumulative distribution function of the null}
-#'   \item{dsge_std}{(only when \code{use_std = TRUE}) standardised DSGE
-#'         (observed null z-score). When \code{vif_correction = TRUE},
-#'         this is the VIF-shrunken standardised DSGE used for p-value
-#'         computation.}
-#'   \item{vif}{Variance Inflation Factor (\code{1 + (n-1) * rho_bar}).
-#'         Always returned (1 when VIF correction is disabled).}
-#'   \item{rho_bar}{Average pairwise inter-gene correlation within the
-#'         gene set. Always returned (0 when VIF correction is disabled).}
-#'   \item{dsge_adj}{VIF-corrected DSGE used for p-value computation.
-#'         When \code{vif_correction = FALSE}, equals \code{dsge_std}
-#'         (if \code{use_std = TRUE}) or \code{observed} (otherwise).}
+#'   \item{dsge_std}{(only when \code{use_std = TRUE}) standardised DSGE}
 #'   \item{nds}{(only when \code{directional = TRUE}) Normalized
 #'         Direction Score, ranging from -1 (pure down) to +1 (pure up)}
 #'   \item{gini_observed}{(only when \code{heterogeneity = TRUE}) observed Gini coefficient}
@@ -544,21 +514,6 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
 #' dsge_perm_test(gene_list = forebrain_genes,
 #'                pvalue = res$pvalue, base_mean = res$baseMean,
 #'                gene_names = rownames(res), seed = 42, use_std = FALSE)
-#'
-#' # With VIF correction (expression matrix + design matrix recommended)
-#' design <- model.matrix(~ treatment, data = colData(dds))
-#' test_vif <- dsge_perm_test(
-#'   gene_list      = forebrain_genes,
-#'   pvalue         = res$pvalue,
-#'   base_mean      = res$baseMean,
-#'   gene_names     = rownames(res),
-#'   seed           = 42,
-#'   vif_correction = TRUE,
-#'   expr_matrix    = log2(counts(dds, normalized = TRUE) + 1),
-#'   design         = design)
-#' test_vif$vif       # variance inflation factor
-#' test_vif$rho_bar   # average inter-gene correlation
-#' test_vif$dsge_adj  # VIF-corrected DSGE
 #' }
 dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
                            base_mean_cutoff = 0.1,
@@ -572,10 +527,7 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
                            use_gpd           = TRUE,
                            gpd_threshold     = 0.99,
                            gpd_method        = "mle",
-                           safety_margin     = 1.2,
-                           vif_correction    = FALSE,
-                           expr_matrix       = NULL,
-                           design            = NULL) {
+                           safety_margin     = 1.05) {
   # ---- Input validation ----
   stopifnot(is.character(gene_list), length(gene_list) > 0)
   if (!is.null(base_mean))
@@ -587,13 +539,6 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
     stopifnot("'direction_vec' must be provided when directional = TRUE" =
                 !is.null(direction_vec))
     stopifnot(length(direction_vec) == length(pvalue))
-  }
-  if (isTRUE(vif_correction)) {
-    stopifnot("'expr_matrix' is required when vif_correction = TRUE" =
-                !is.null(expr_matrix))
-    stopifnot(is.matrix(expr_matrix) || is.data.frame(expr_matrix))
-    if (!is.null(design))
-      stopifnot(ncol(expr_matrix) == nrow(design))
   }
 
   # ---- Build filtered gene pool ----
@@ -631,27 +576,6 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
     stop("No genes from 'gene_list' found in the filtered gene pool", call. = FALSE)
 
   n_target <- length(idx)
-
-  # ---- VIF correction: compute variance inflation factor ----
-  vif_val  <- 1
-  rho_bar  <- 0
-  if (isTRUE(vif_correction)) {
-    pw_genes <- names(pool_z)[idx]
-    pw_expr  <- expr_matrix[pw_genes, , drop = FALSE]
-    finite_rows <- apply(is.finite(pw_expr), 1L, all)
-    pw_expr <- pw_expr[finite_rows, , drop = FALSE]
-    n_eff <- nrow(pw_expr)
-    if (n_eff >= 3L) {
-      if (!is.null(design)) {
-        vif_res <- compute_vif_qr(pw_expr, design)
-      } else {
-        vif_res <- compute_vif_pairwise(pw_expr)
-      }
-      vif_val <- vif_res$vif
-      rho_bar <- vif_res$rho_bar
-    }
-  }
-
   observed <- compute_dsge(idx, pool_z)
 
   if (heterogeneity) {
@@ -686,16 +610,6 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
   }
   if (progress) { utils::setTxtProgressBar(pb, n_perm); close(pb) }
 
-  # ---- Apply VIF correction to DSGE ----
-  if (isTRUE(use_std)) {
-    dsge_obs <- (observed - mean(null)) / sd(null)
-    if (isTRUE(vif_correction)) dsge_obs <- dsge_obs / sqrt(vif_val)
-  } else {
-    dsge_obs <- observed
-    if (isTRUE(vif_correction))
-      dsge_obs <- mean(null) + (observed - mean(null)) / sqrt(vif_val)
-  }
-
   # ---- Fit GPD (optional), compute standardised DSGE & p-value ----
   if (isTRUE(use_std)) {
     out <- list(observed  = observed,
@@ -703,41 +617,35 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
                 null      = null,
                 dsge_std  = (observed - mean(null)) / sd(null),
                 nds       = if (isTRUE(directional)) nds_observed else NULL,
-                ecdf      = stats::ecdf(null),
-                vif       = vif_val,
-                rho_bar   = rho_bar,
-                dsge_adj  = dsge_obs)
+                ecdf      = stats::ecdf(null))
 
     null_std <- (null - mean(null)) / sd(null)
     if (isTRUE(use_gpd)) {
       gpd_std  <- fit_gpd_tail(null_std, tail = gpd_threshold, gpd_method = gpd_method)
-      if (!is.null(gpd_std) && dsge_obs > gpd_std$u) {
-        out$p_value <- eval_gpd_p(gpd_std, dsge_obs, safety_margin = safety_margin)
+      if (!is.null(gpd_std) && out$dsge_std > gpd_std$u) {
+        out$p_value <- eval_gpd_p(gpd_std, out$dsge_std, safety_margin = safety_margin)
       } else {
-        out$p_value <- sum(null_std >= dsge_obs) / n_perm
+        out$p_value <- sum(null_std >= out$dsge_std) / n_perm
       }
     } else {
-      out$p_value <- sum(null_std >= dsge_obs) / n_perm
+      out$p_value <- sum(null_std >= out$dsge_std) / n_perm
     }
   } else {
     out <- list(observed = observed,
                 n_genes  = n_target,
                 null     = null,
                 nds      = if (isTRUE(directional)) nds_observed else NULL,
-                ecdf     = stats::ecdf(null),
-                vif      = vif_val,
-                rho_bar  = rho_bar,
-                dsge_adj = dsge_obs)
+                ecdf     = stats::ecdf(null))
 
     if (isTRUE(use_gpd)) {
       gpd <- fit_gpd_tail(null, tail = gpd_threshold, gpd_method = gpd_method)
-      if (!is.null(gpd) && dsge_obs > gpd$u) {
-        out$p_value <- eval_gpd_p(gpd, dsge_obs, safety_margin = safety_margin)
+      if (!is.null(gpd) && observed > gpd$u) {
+        out$p_value <- eval_gpd_p(gpd, observed, safety_margin = safety_margin)
       } else {
-        out$p_value <- sum(null > dsge_obs) / n_perm
+        out$p_value <- sum(null > observed) / n_perm
       }
     } else {
-      out$p_value <- sum(null > dsge_obs) / n_perm
+      out$p_value <- sum(null > observed) / n_perm
     }
   }
 
@@ -752,77 +660,6 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
   }
 
   out
-}
-
-
-# =========================================================================
-# VIF correction helpers — CAMERA-style variance inflation factor
-# =========================================================================
-
-# ---- QR residual-based VIF (requires design matrix) ----
-#
-# Uses QR decomposition of the design matrix to extract the residual
-# space, then estimates VIF from the column means of the standardized
-# residuals. This avoids computing any pairwise correlations.
-#
-# This is the recommended method. Design matrix 'design' should encode
-# the experimental design (groups, batches, etc.).
-#
-# Args:
-#   expr_subset - m × n numeric matrix (m genes, n samples)
-#   design      - n × p design matrix (with intercept)
-#
-# Returns: list(vif, rho_bar)
-compute_vif_qr <- function(expr_subset, design) {
-  m <- nrow(expr_subset)
-
-  qrdesign <- qr(design)
-  rank <- qrdesign$rank
-  d <- nrow(design) - rank
-
-  if (d < 1L) return(list(vif = 1, rho_bar = 0))
-
-  # QR left-multiply by Q^T, keep residual portion only
-  y <- qr.qty(qrdesign, t(expr_subset))
-  y <- y[-(1:rank), , drop = FALSE]   # d × m
-
-  # Transpose and standardize each row (gene) by its own SD
-  y <- t(y)                             # m × d
-  row_scale <- sqrt(rowMeans(y^2))
-  y <- y / row_scale                    # m × d, genes standardized
-
-  # VIF = m * mean(colMeans^2)
-  cm <- colMeans(y)
-  vif <- m * mean(cm^2)
-  vif <- max(vif, 1)                    # floor at 1
-
-  rho_bar <- (vif - 1) / (m - 1)
-  list(vif = vif, rho_bar = rho_bar)
-}
-
-
-# ---- Pairwise Pearson VIF (fallback when no design matrix) ----
-#
-# Computes the full m×m Pearson correlation matrix, then derives
-# VIF = 1 + (m - 1) * mean(rho). Use only as fallback:
-# the Q^T-based method above is faster and more robust.
-#
-# Args:
-#   expr_subset - m × n numeric matrix (m genes, n samples)
-#
-# Returns: list(vif, rho_bar)
-compute_vif_pairwise <- function(expr_subset) {
-  m <- nrow(expr_subset)
-  if (m < 3L) return(list(vif = 1, rho_bar = 0))
-
-  pw_cor <- cor(t(expr_subset), method = "pearson")
-  ut <- upper.tri(pw_cor, diag = FALSE)
-  rho_bar <- mean(pw_cor[ut], na.rm = TRUE)
-
-  vif <- 1 + (m - 1) * rho_bar
-  vif <- max(vif, 1)
-
-  list(vif = vif, rho_bar = rho_bar)
 }
 
 
@@ -842,7 +679,7 @@ compute_vif_pairwise <- function(expr_subset) {
 #' null distribution, greatly reducing computation.
 #'
 #' @details
-#' **Algorithm steps (10 steps)**
+#' **Algorithm steps (9 steps)**
 #' \enumerate{
 #'   \item \strong{Build gene pool}: filter DESeq2 results
 #'         (baseMean > cutoff), compute per-gene raw z-scores.
@@ -850,33 +687,22 @@ compute_vif_pairwise <- function(expr_subset) {
 #'         the gene pool via the \code{gene_id_col} column.
 #'   \item \strong{Filter pathways}: retain pathways with
 #'         \code{min_size <= n_matched <= max_size}.
-#'   \item \strong{VIF correction (optional)}: when
-#'         \code{vif_correction = TRUE}, estimate the variance inflation
-#'         factor for each pathway using the expression matrix. Pathways
-#'         with high inter-gene correlation have inflated DSGE variance;
-#'         VIF shrinks the observed DSGE to match the independent-sampling
-#'         null. Requires \code{expr_matrix}; when \code{design} is also
-#'         provided, uses QR decomposition (CAMERA-style) for a cleaner
-#'         residual-based estimate.
 #'   \item \strong{Compute observed DSGE}: per pathway as the mean of
 #'         member gene z-scores: DSGE = mean(z_i).
 #'   \item \strong{Generate size-grouped null distributions}: each unique
 #'         matched-gene count gets its own permutation run (vectorized
 #'         batch sampling), with
 #'         simultaneous GPD tail fitting.
-#'   \item \strong{Compute standardised DSGE} (step 7): when
+#'   \item \strong{Compute standardised DSGE} (step 6): when
 #'         \code{use_std = TRUE}, compute \code{dsge_std = (observed -
 #'         mean(null)) / sd(null)} for each pathway, using the
-#'         size-grouped null distribution. When \code{vif_correction = TRUE},
-#'         the standardised DSGE is further divided by \code{sqrt(VIF)}.
+#'         size-grouped null distribution.
 #'   \item \strong{Compute p-values}: when \code{use_std = TRUE},
 #'         empirical ECDF of the standardised null vs. dsge_std; when
 #'         \code{use_std = FALSE}, GPD tail extrapolation (above 90th
 #'         percentile) + empirical ECDF on the raw null distribution.
-#'         Both paths apply VIF correction when enabled.
-#'   \item \strong{BH/BY FDR correction}: Benjamini-Hochberg or
-#'         Benjamini-Yekutieli multiple testing correction on all
-#'         pathway p-values.
+#'   \item \strong{BH FDR correction}: Benjamini-Hochberg multiple
+#'         testing correction on all pathway p-values.
 #'   \item \strong{Sort and return}: ordered by p_adj ascending.
 #' }
 #'
@@ -950,7 +776,9 @@ compute_vif_pairwise <- function(expr_subset) {
 #'   \code{"pwmb"}, \code{"mdpd"}, \code{"med"}, \code{"pickands"},
 #'   \code{"lme"}, \code{"mgf"}.
 #' @param safety_margin Safety margin for GPD support-constrained adjustment.
-#'   Default \code{1.2}. Larger values produce more conservative p-values.
+#'   Default \code{1.05} (5 % margin). Larger values (e.g., \code{2}) produce
+#'   larger (more conservative) p-values for extremely extreme observations,
+#'   avoiding double-precision underflow to zero at the cost of increased bias.
 #' @param n_cores Number of CPU cores for parallel null distribution
 #'   generation. Default \code{1} (sequential). Set to
 #'   \code{parallel::detectCores()} to use all available cores.
@@ -966,33 +794,6 @@ compute_vif_pairwise <- function(expr_subset) {
 #'   \code{"holm"}, \code{"hochberg"}, \code{"hommel"},
 #'   \code{"bonferroni"}, \code{"BH"}, \code{"BY"}, \code{"fdr"},
 #'   \code{"none"}.
-#' @param vif_correction Whether to perform Variance Inflation Factor
-#'   correction for inter-gene correlation within pathways. Default
-#'   \code{FALSE}. When \code{TRUE}, \code{expr_matrix} must be provided.
-#'   Inter-gene correlation inflates the variance of observed DSGE
-#'   relative to the permutation null; VIF correction shrinks the
-#'   observed DSGE accordingly, yielding more conservative p-values.
-#'   When a \code{design} matrix is provided, uses QR decomposition
-#'   (CAMERA-style) to estimate residual-based correlations; otherwise
-#'   falls back to pairwise Pearson on the raw expression matrix.
-#'   The result data.frame will include extra columns \code{dsge_adj},
-#'   \code{vif}, and \code{rho_bar}.
-#' @param expr_matrix Numeric expression matrix (genes \eqn{\times}
-#'   samples). Required when \code{vif_correction = TRUE}. Row names
-#'   must be gene names matching \code{gene_names}. Column names are
-#'   ignored but should match \code{design} row names when provided.
-#'   Typically log2-transformed normalized counts (log2TPM, log2FPKM,
-#'   or vst/rlog from DESeq2).
-#' @param design Numeric design matrix (samples \eqn{\times} variables)
-#'   encoding the experimental design, typically created by
-#'   \code{model.matrix()}. Optional; only used when
-#'   \code{vif_correction = TRUE}. When provided, VIF is estimated via
-#'   QR decomposition of the design matrix (CAMERA-style, Wu & Smyth
-#'   2012), yielding a cleaner residual-based estimate of inter-gene
-#'   correlation that excludes treatment effects. When omitted, VIF is
-#'   estimated via pairwise Pearson correlation on the raw expression
-#'   matrix (more conservative, as it includes treatment-induced
-#'   correlations).
 #'
 #' @return By default, a \code{data.frame} sorted by \code{p_adj}
 #'   ascending, with columns:
@@ -1012,19 +813,6 @@ compute_vif_pairwise <- function(expr_subset) {
 #'   When \code{use_std = TRUE} (default), additionally includes:
 #'   \code{dsge_std} = (observed DSGE - mean(null)) / sd(null),
 #'   standardised using the size-grouped null distribution.
-#'
-#'   When \code{vif_correction = TRUE}, additionally includes:
-#'   \describe{
-#'     \item{\code{dsge_adj}}{VIF-corrected DSGE. When
-#'           \code{use_std = TRUE}, this is the standardised DSGE after
-#'           dividing by \code{sqrt(VIF)}. When \code{use_std = FALSE},
-#'           this is \code{mean(null) + (observed - mean(null)) / sqrt(VIF)}.}
-#'     \item{\code{vif}}{The Variance Inflation Factor for each pathway:
-#'           \code{1 + (n-1) * rho_bar}. Larger values indicate stronger
-#'           inter-gene correlation and thus stronger correction.}
-#'     \item{\code{rho_bar}}{Average pairwise inter-gene correlation
-#'           within the pathway (Pearson on residuals or raw expression).}
-#'   }
 #'
 #'   When \code{return_null = TRUE}, returns a \code{list} with:
 #'   \item{table}{the data.frame described above}
@@ -1048,20 +836,9 @@ compute_vif_pairwise <- function(expr_subset) {
 #' go  <- read_obo("go.obo")
 #'
 #' pw <- get_pathway_genes(gaf, go_names = go, min_size = 5)
-#'
-#' # Default: no VIF correction
 #' result <- pathway_dsge(pw, res$pvalue, res$baseMean, rownames(res),
 #'                        seed = 42)
 #' head(result)
-#'
-#' # With VIF correction (expression matrix + design matrix recommended)
-#' design <- model.matrix(~ treatment, data = colData(dds))
-#' result_vif <- pathway_dsge(pw, res$pvalue, res$baseMean, rownames(res),
-#'                            seed = 42,
-#'                            vif_correction = TRUE,
-#'                            expr_matrix    = log2(counts(dds, normalized = TRUE) + 1),
-#'                            design         = design)
-#' head(result_vif)
 #' }
 pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
                          gene_id_col       = "db_object_symbol",
@@ -1079,13 +856,10 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
                          use_gpd           = TRUE,
                          gpd_threshold     = 0.99,
                          gpd_method        = "mle",
-                         safety_margin     = 1.2,
+                         safety_margin     = 1.05,
                          n_cores           = 1L,
                          dsge_std          = NULL,
-                         p_adjust_method   = "BY",
-                         vif_correction    = FALSE,
-                         expr_matrix       = NULL,
-                         design            = NULL) {
+                         p_adjust_method   = "BY") {
   # ---- Backward compatibility: dsge_std → use_std ----
   if (!is.null(dsge_std)) {
     warning("'dsge_std' is deprecated; use 'use_std' instead", call. = FALSE)
@@ -1106,13 +880,6 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
     stopifnot("'direction_vec' must be provided when directional = TRUE" =
                 !is.null(direction_vec))
     stopifnot(length(direction_vec) == length(pvalue))
-  }
-  if (isTRUE(vif_correction)) {
-    stopifnot("'expr_matrix' is required when vif_correction = TRUE" =
-                !is.null(expr_matrix))
-    stopifnot(is.matrix(expr_matrix) || is.data.frame(expr_matrix))
-    if (!is.null(design))
-      stopifnot(ncol(expr_matrix) == nrow(design))
   }
 
   # =========================================================================
@@ -1200,108 +967,19 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   matched   <- matched[keep_pw]
 
   # =========================================================================
-  # Step 3.5: VIF correction — compute variance inflation factor per pathway
-  # =========================================================================
-  # When vif_correction = TRUE, for each pathway:
-  #   1. Extract expression submatrix from expr_matrix
-  #   2. Filter NA/infinite genes
-  #   3. Estimate VIF via QR residuals (if design given) or pairwise Pearson
-  #   4. Update matched indices to reflect post-filter genes
-  #   5. Re-filter pathways by min_size/max_size
-  #
-  # VIF is then applied in Step 6/7: DSGE_std_adj = DSGE_std / sqrt(VIF)
-  #
-  gene_idx_list <- NULL  # only used when vif_correction = TRUE
-  vif_vals  <- NULL
-  rho_bars  <- NULL
-
-  if (isTRUE(vif_correction)) {
-    n_go <- length(go_ids)
-    vif_vals  <- numeric(n_go)
-    rho_bars  <- numeric(n_go)
-    gene_idx_list <- vector("list", n_go)
-    has_design <- !is.null(design)
-
-    for (i in seq_len(n_go)) {
-      n <- n_matched[i]
-      if (n < 3L) {
-        vif_vals[i] <- 1
-        rho_bars[i] <- 0
-        gene_idx_list[[i]] <- matched[[i]]
-        next
-      }
-
-      # Map matched indices back to gene names → expression matrix
-      pw_gene_names <- names(pool_z)[matched[[i]]]
-      pw_expr <- expr_matrix[pw_gene_names, , drop = FALSE]
-
-      # Remove rows with any NA / non-finite values
-      finite_rows <- apply(is.finite(pw_expr), 1L, all)
-      if (!all(finite_rows)) {
-        pw_expr <- pw_expr[finite_rows, , drop = FALSE]
-      }
-
-      n_eff <- nrow(pw_expr)
-      if (n_eff < 3L) {
-        vif_vals[i] <- 1
-        rho_bars[i] <- 0
-        gene_idx_list[[i]] <- matched[[i]]
-        next
-      }
-
-      # Update matched indices to only kept genes
-      kept_names <- rownames(pw_expr)
-      kept_idx   <- match(kept_names, names(pool_z))
-      gene_idx_list[[i]] <- kept_idx
-
-      # Estimate VIF
-      if (has_design) {
-        vif_res <- compute_vif_qr(pw_expr, design)
-      } else {
-        vif_res <- compute_vif_pairwise(pw_expr)
-      }
-      vif_vals[i] <- vif_res$vif
-      rho_bars[i] <- vif_res$rho_bar
-    }
-
-    # Update n_matched to post-filter counts
-    n_matched <- lengths(gene_idx_list)
-
-    # Re-filter by min_size / max_size
-    keep_pw   <- n_matched >= min_size & n_matched <= max_size
-    if (sum(keep_pw) == 0)
-      stop("After VIF correction gene filtering, no pathways with ",
-           min_size, " <= n_matched <= ", max_size, call. = FALSE)
-
-    go_ids        <- go_ids[keep_pw]
-    go_name       <- go_name[keep_pw]
-    go_aspect     <- go_aspect[keep_pw]
-    n_pathway     <- n_pathway[keep_pw]
-    n_matched     <- n_matched[keep_pw]
-    matched       <- matched[keep_pw]
-    gene_idx_list <- gene_idx_list[keep_pw]
-    vif_vals      <- vif_vals[keep_pw]
-    rho_bars      <- rho_bars[keep_pw]
-
-    names(vif_vals) <- go_ids
-    names(rho_bars) <- go_ids
-  }
-
-  # =========================================================================
   # Step 4: Compute observed DSGE per pathway (and optional Gini, CV, NDS)
   # =========================================================================
-  # DSGE = mean(z_i); when vif_correction, use gene_idx_list (post-filter)
-  idx_list <- if (isTRUE(vif_correction)) gene_idx_list else matched
-  observed <- vapply(idx_list, function(idx) compute_dsge(idx, pool_z),
+  # DSGE = mean(z_i)
+  observed <- vapply(matched, function(idx) compute_dsge(idx, pool_z),
                      numeric(1L))
   if (heterogeneity) {
-    gini_obs <- vapply(idx_list, function(idx) compute_gini(pool_z[idx]),
+    gini_obs <- vapply(matched, function(idx) compute_gini(pool_z[idx]),
                        numeric(1L))
-    cv_obs   <- vapply(idx_list, function(idx) compute_cv(pool_z[idx]),
+    cv_obs   <- vapply(matched, function(idx) compute_cv(pool_z[idx]),
                        numeric(1L))
   }
   if (isTRUE(directional)) {
-    nds_obs <- vapply(idx_list, function(idx) {
+    nds_obs <- vapply(matched, function(idx) {
       compute_nds(pool_z[idx], pool_dir_raw[idx])   # raw log2FC for abs-ranking
     }, numeric(1L))
   }
@@ -1438,10 +1116,6 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
       key  <- as.character(n_matched[i])
       nul  <- null_raw[[key]]
       dsge_std_vals[i] <- (observed[i] - mean(nul)) / sd(nul)
-      # VIF correction: shrink dsge_std to match independent-sampling variance
-      if (isTRUE(vif_correction)) {
-        dsge_std_vals[i] <- dsge_std_vals[i] / sqrt(vif_vals[i])
-      }
     }
   }
 
@@ -1476,23 +1150,16 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
         if (p_val[i] == 0) p_val[i] <- 1 / n_perm
       }
     } else {
-      if (isTRUE(vif_correction)) {
-        nul <- null_raw[[key]]
-        null_mean <- mean(nul)
-        dsge_adj <- null_mean + (observed[i] - null_mean) / sqrt(vif_vals[i])
-      } else {
-        dsge_adj <- observed[i]
-      }
       if (isTRUE(use_gpd)) {
         gpd <- null_gpd[[key]]
-        if (!is.null(gpd) && dsge_adj > gpd$u) {
-          p_val[i] <- eval_gpd_p(gpd, dsge_adj, safety_margin = safety_margin)
+        if (!is.null(gpd) && observed[i] > gpd$u) {
+          p_val[i] <- eval_gpd_p(gpd, observed[i], safety_margin = safety_margin)
         } else {
-          p_val[i] <- sum(null_raw[[key]] > dsge_adj) / n_perm
+          p_val[i] <- sum(null_raw[[key]] > observed[i]) / n_perm
           if (p_val[i] == 0) p_val[i] <- 1 / n_perm
         }
       } else {
-        p_val[i] <- sum(null_raw[[key]] > dsge_adj) / n_perm
+        p_val[i] <- sum(null_raw[[key]] > observed[i]) / n_perm
         if (p_val[i] == 0) p_val[i] <- 1 / n_perm
       }
     }
@@ -1518,21 +1185,6 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   if (heterogeneity)
     het_p_adj <- stats::p.adjust(het_p, method = p_adjust_method)
 
-  # ---- Adjusted DSGE for output (VIF-corrected raw-scale value) ----
-  if (isTRUE(vif_correction)) {
-    if (isTRUE(use_std)) {
-      # When use_std = TRUE, dsge_adj is on the standardised scale
-      dsge_adj_vals <- dsge_std_vals
-    } else {
-      dsge_adj_vals <- numeric(length(observed))
-      for (i in seq_along(observed)) {
-        key <- as.character(n_matched[i])
-        nul <- null_raw[[key]]
-        dsge_adj_vals[i] <- mean(nul) + (observed[i] - mean(nul)) / sqrt(vif_vals[i])
-      }
-    }
-  }
-
   # =========================================================================
   # Step 9: Assemble results, sorted by p_adj ascending
   # =========================================================================
@@ -1548,19 +1200,6 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
     stringsAsFactors = FALSE,
     row.names = NULL
   )
-  # ---- Insert VIF correction columns (immediately after dsge) ----
-  if (isTRUE(vif_correction)) {
-    dsge_pos <- which(names(result) == "dsge")
-    result <- data.frame(
-      result[, seq_len(dsge_pos), drop = FALSE],
-      dsge_adj = dsge_adj_vals,
-      vif      = vif_vals,
-      rho_bar  = rho_bars,
-      result[, seq(dsge_pos + 1, ncol(result)), drop = FALSE],
-      stringsAsFactors = FALSE,
-      row.names = NULL
-    )
-  }
   if (isTRUE(use_std)) {
     # Insert dsge_std immediately after dsge column
     dsge_pos <- which(names(result) == "dsge")
