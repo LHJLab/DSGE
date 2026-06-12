@@ -23,7 +23,7 @@ cat("Loading dependencies...\n")
 source("R/dsge.R")
 
 cat("Loading limma results...\n")
-res <- read.csv("E:/DSGE/inst/CML_GSE226360/limma_results/limma_FLT3_IR_vs_FLT3.csv", stringsAsFactors = FALSE)
+res <- read.csv("inst/data_exp/limma_FLT3_IR_vs_FLT3.csv", stringsAsFactors = FALSE)
 cat("  Genes:", nrow(res), "\n")
 
 # ---- 从真实 limma 结果构建 z 分数池 ----
@@ -35,7 +35,7 @@ cat(sprintf("Background gene pool: n=%d, mean(z)=%.4f, sd(z)=%.4f\n",
             n_pool, mean(pool_z), sd(pool_z)))
 
 # ---- 1. 参数 ----
-set.seed(666)
+set.seed(42)
 N_PERM     <- 100000L                          # 排列次数
 SIZES      <- seq(5, 500, by = 5)             # 通路大小序列
 SHOW_SIZES <- c(5, 10, 25, 50, 100, 200, 500) # 面板 A 展示的代表性大小

@@ -14,16 +14,14 @@
 #   results/plots/null_density_evolution.pdf  —— 双面板合并图（论文用）
 #   results/plots/null_density_ridge.pdf      —— 脊线图（可选）
 # =========================================================================
-
-# ---- 0. 加载依赖 & 读取真实数据 ----
 cat("Loading dependencies...\n")
 source("R/read_gaf.R")
 source("R/read_obo.R")
 source("R/get_pathway_genes.R")
 source("R/dsge.R")
-
+#library(DSGE)
 cat("Loading DESeq2 results...\n")
-res <- read.csv("E:/DSGE/inst/CML_GSE226360/limma_results/limma_FLT3_IR_vs_FLT3.csv", stringsAsFactors = FALSE)
+res <- read.csv("inst/data_exp/limma_FLT3_IR_vs_FLT3.csv", stringsAsFactors = FALSE)
 #res <- subset(res, geneType == "protein_coding" & geneName != ".")
 cat("  Protein-coding genes:", nrow(res), "\n")
 
@@ -37,7 +35,7 @@ cat(sprintf("Background gene pool: n=%d, mean(z)=%.4f, sd(z)=%.4f\n",
 
 # ---- 1. 参数 ----
 set.seed(666)
-N_PERM     <- 10000L                          # 排列次数
+N_PERM     <- 100000L                          # 排列次数
 SIZES      <- seq(5, 500, by = 5)             # 通路大小序列
 SHOW_SIZES <- c(5, 10, 25, 50, 100, 200, 500) # 面板 A 展示的代表性大小
 
