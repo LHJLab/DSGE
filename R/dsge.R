@@ -176,7 +176,7 @@ fit_gpd_tail <- function(null, tail = 0.99, gpd_method = "mle") {
 #'
 #' @return Right-tail p-value in \eqn{[0, 1]}.
 #' @noRd
-eval_gpd_p <- function(fit, obs, safety_margin = 1.2) {
+eval_gpd_p <- function(fit, obs, safety_margin = 1.6) {
   # pat = P(X > u), pgpd(*, lower.tail = FALSE) = P(X > obs | X > u)
   p <- fit$pat * evd::pgpd(obs - fit$u, scale  = fit$scale,
                             shape = fit$shape, lower.tail = FALSE)
@@ -521,7 +521,7 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
                            use_gpd           = TRUE,
                            gpd_threshold     = 0.99,
                            gpd_method        = "mle",
-                           safety_margin     = 1.05) {
+                           safety_margin     = 1.6) {
   # ---- Input validation ----
   stopifnot(is.character(gene_list), length(gene_list) > 0)
   if (!is.null(base_mean))
@@ -850,7 +850,7 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
                          use_gpd           = TRUE,
                          gpd_threshold     = 0.99,
                          gpd_method        = "mle",
-                         safety_margin     = 1.05,
+                         safety_margin     = 1.6,
                          n_cores           = 1L,
                          dsge_std          = NULL,
                          p_adjust_method   = "BY") {
@@ -1308,7 +1308,7 @@ plot_dsge <- function(result, n = 9L,
 
   # Auto-read safety_margin from result; user can still override
   if (is.null(safety_margin))
-    safety_margin <- if (!is.null(result$safety_margin)) result$safety_margin else 1.05
+    safety_margin <- if (!is.null(result$safety_margin)) result$safety_margin else 1.6
 
   # ---- Auto-detect: if dsge_std column exists, default to standardised ----
   if (is.null(use_std))
