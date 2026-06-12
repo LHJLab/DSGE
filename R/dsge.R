@@ -244,22 +244,23 @@ compute_cv <- function(x) {
 # the sum of z-scores of up-regulated genes and D is the sum of
 # z-scores of down-regulated genes.
 #
-# By default, only the top 25% most-perturbed genes (ranked by absolute
-# direction value, e.g. |log2FC|) are retained; the bottom 75% is
+# By default, only the top top_frac most-perturbed genes (ranked by absolute
+# direction value, e.g. |log2FC|) are retained; the remainder is
 # treated as noise.  Within this subset, U is the sum of z-scores of
 # all up-regulated (dir > 0) genes and D the sum of all down-regulated
-# (dir < 0) genes.  If the top-25% subset contains fewer than 10 genes
+# (dir < 0) genes.  If the top subset contains fewer than 10 genes
 # the function falls back to using all genes — the legacy behaviour.
 #
 # Args:
-#   z_sub - numeric vector of absolute z-scores for pathway genes
-#   d_sub - numeric vector of direction values (e.g. log2FC) of the
-#           same length; NAs are silently removed
+#   z_sub    - numeric vector of absolute z-scores for pathway genes
+#   d_sub    - numeric vector of direction values (e.g. log2FC) of the
+#              same length; NAs are silently removed
+#   top_frac - fraction of most-perturbed genes to retain (default 0.25)
 #
 # Returns:
 #   Numeric scalar in [-1, 1].  Positive → net up-regulation;
 #   negative → net down-regulation; NA when no valid direction info.
-compute_nds <- function(z_sub, d_sub) {
+compute_nds <- function(z_sub, d_sub, top_frac = 0.25) {
   # Drop genes with missing direction information
   valid <- !is.na(d_sub)
   z_sub <- z_sub[valid]
@@ -268,12 +269,12 @@ compute_nds <- function(z_sub, d_sub) {
   n <- length(z_sub)
   if (n == 0L) return(NA_real_)
 
-  n_quarter <- floor(n * 0.25)
+  n_keep <- floor(n * top_frac)
 
-  if (n_quarter >= 10L) {
-    # Keep only the top 25% most-perturbed genes (largest |log2FC|)
+  if (n_keep >= 10L) {
+    # Keep only the top top_frac most-perturbed genes (largest |log2FC|)
     ord    <- order(abs(d_sub), decreasing = TRUE)
-    keep   <- ord[seq_len(n_quarter)]
+    keep   <- ord[seq_len(n_keep)]
     z_keep <- z_sub[keep]
     d_keep <- d_sub[keep]
     up     <- z_keep[d_keep > 0]
@@ -444,6 +445,10 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
 #'   positive values indicate net up-regulation, negative values net
 #'   down-regulation. Requires \code{use_gpd = TRUE} (default) for
 #'   reliable extreme p-values alongside directional information.
+#' @param nds_top_frac Fraction of most-perturbed genes retained for
+#'   NDS calculation. Default \code{0.25} (top 25\%). Only used when
+#'   \code{directional = TRUE}. Lower values focus on the most extreme
+#'   genes; higher values include more genes.
 #' @param direction_vec Numeric vector of direction indicators
 #'   (e.g., log fold changes), same length as \code{pvalue}. Used to
 #'   classify genes as up-regulated (positive direction) or
@@ -521,7 +526,8 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
                            use_gpd           = TRUE,
                            gpd_threshold     = 0.99,
                            gpd_method        = "mle",
-                           safety_margin     = 1.6) {
+                           safety_margin     = 1.6,
+                           nds_top_frac      = 0.25) {
   # ---- Input validation ----
   stopifnot(is.character(gene_list), length(gene_list) > 0)
   if (!is.null(base_mean))
@@ -579,7 +585,7 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
   if (isTRUE(directional)) {
     z_sub <- pool_z[idx]
     d_sub <- pool_dir_raw[idx]                        # raw log2FC for abs-ranking
-    nds_observed <- compute_nds(z_sub, d_sub)
+    nds_observed <- compute_nds(z_sub, d_sub, top_frac = nds_top_frac)
   }
 
   # ---- Permutation: generate null distribution ----
@@ -735,6 +741,10 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'   positive values indicate net up-regulation, negative values net
 #'   down-regulation. The result data.frame will include an
 #'   \code{nds} column.
+#' @param nds_top_frac Fraction of most-perturbed genes retained for
+#'   NDS calculation. Default \code{0.25} (top 25\%). Only used when
+#'   \code{directional = TRUE}. Lower values focus on the most extreme
+#'   genes; higher values include more genes.
 #' @param direction_vec Numeric vector of direction indicators
 #'   (e.g., log fold changes), same length as \code{pvalue}. Used to
 #'   classify genes as up-regulated (positive direction) or
@@ -853,7 +863,8 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
                          safety_margin     = 1.6,
                          n_cores           = 1L,
                          dsge_std          = NULL,
-                         p_adjust_method   = "BY") {
+                         p_adjust_method   = "BY",
+                         nds_top_frac      = 0.25) {
   # ---- Backward compatibility: dsge_std → use_std ----
   if (!is.null(dsge_std)) {
     warning("'dsge_std' is deprecated; use 'use_std' instead", call. = FALSE)
@@ -974,7 +985,7 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   }
   if (isTRUE(directional)) {
     nds_obs <- vapply(matched, function(idx) {
-      compute_nds(pool_z[idx], pool_dir_raw[idx])   # raw log2FC for abs-ranking
+      compute_nds(pool_z[idx], pool_dir_raw[idx], top_frac = nds_top_frac)
     }, numeric(1L))
   }
 
