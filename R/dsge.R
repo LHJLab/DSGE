@@ -181,24 +181,18 @@ eval_gpd_p <- function(fit, obs, safety_margin = 1.2) {
   p <- fit$pat * evd::pgpd(obs - fit$u, scale  = fit$scale,
                             shape = fit$shape, lower.tail = FALSE)
 
-  # ---- Support-constrained adjustment (arXiv:2602.22975) ----
-  # When the unconstrained GPD has ξ < 0, the distribution has a finite
-  # upper bound: u - σ/ξ. If the observed DSGE exceeds this bound,
-  # pgpd returns 0. This is statistically correct but practically
-  # undesirable (loses all resolution for extreme pathways).
-  #
-  # Following Peschel et al., we adjust the shape parameter ξ upward
-  # to the minimum value that places the upper bound strictly above the
-  # observed value, with a safety_margin × 100 % margin.
+  # ---- Support-constrained adjustment ----
+  # When pgpd returns 0 (finite upper bound with ξ < 0, or numerical
+  # underflow for extreme observations under any ξ), we adjust the shape
+  # parameter ξ upward so the new upper bound sits at obs + (safety_margin
+  # - 1) × (obs - u), guaranteeing a non-zero p-value.
   # Larger safety_margin → larger adjusted p-value (more conservative).
-  # safety_margin = 2.0 means upper bound = 2 × obs (100 % margin).
-  if (isTRUE(p == 0) && isTRUE(fit$shape < 0)) {
-    if (obs > fit$u - fit$scale / fit$shape) {
-      shape_adj <- -fit$scale / ((obs - fit$u) * safety_margin)
-      if (isTRUE(shape_adj < 0) && isTRUE(shape_adj > fit$shape)) {
-        p <- fit$pat * evd::pgpd(obs - fit$u, scale  = fit$scale,
-                                  shape = shape_adj, lower.tail = FALSE)
-      }
+  # safety_margin = 1.0 disables the margin (tight bound at obs).
+  if (isTRUE(p == 0)) {
+    shape_adj <- -fit$scale / ((obs - fit$u) * safety_margin)
+    if (isTRUE(shape_adj < 0)) {
+      p <- fit$pat * evd::pgpd(obs - fit$u, scale = fit$scale,
+                                shape = shape_adj, lower.tail = FALSE)
     }
   }
 
@@ -789,8 +783,8 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #' @param p_adjust_method Multiple testing correction method. Passed to
 #'   \code{stats::p.adjust()}. Default \code{"BY"} (Benjamini-Yekutieli)
 #'   which controls FDR under arbitrary dependence. Use \code{"BH"} for
-#'   the standard Benjamini-Hochberg (assumes independence or positive
-#'   dependence). All methods supported by \code{p.adjust} are valid:
+#'   Benjamini-Hochberg (controls FDR under positive dependence).
+#'   All methods supported by \code{p.adjust} are valid:
 #'   \code{"holm"}, \code{"hochberg"}, \code{"hommel"},
 #'   \code{"bonferroni"}, \code{"BH"}, \code{"BY"}, \code{"fdr"},
 #'   \code{"none"}.
@@ -1236,7 +1230,8 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   if (!isTRUE(return_null)) return(result)
 
   # Return list with table and null distributions (for plot_dsge())
-  out <- list(table = result, null_raw = null_raw)
+  out <- list(table = result, null_raw = null_raw,
+              safety_margin = safety_margin)
   if (isTRUE(use_gpd)) {
     out$null_gpd <- null_gpd
     if (isTRUE(use_std)) out$null_gpd_std <- null_gpd_std
@@ -1300,14 +1295,20 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
 #' }
 plot_dsge <- function(result, n = 9L,
                        go_ids   = NULL,
-                       col_null = "steelblue",
-                       col_obs  = "red",
-                       col_tail = "#FFA50040",
+                       col_null = "#2166AC",
+                       col_tail = "#E41A1C",
+                       col_obs  = "#D73027",
+                       col_thr  = "#999999",
+                       safety_margin = NULL,
                        cex_main = 0.85,
                        use_std  = NULL) {
   # ---- Input check ----
   if (!is.list(result) || !all(c("table", "null_raw") %in% names(result)))
     stop("'result' must be from pathway_dsge(..., return_null = TRUE)", call. = FALSE)
+
+  # Auto-read safety_margin from result; user can still override
+  if (is.null(safety_margin))
+    safety_margin <- if (!is.null(result$safety_margin)) result$safety_margin else 1.05
 
   # ---- Auto-detect: if dsge_std column exists, default to standardised ----
   if (is.null(use_std))
@@ -1337,9 +1338,10 @@ plot_dsge <- function(result, n = 9L,
   cols <- ceiling(sqrt(n))
   rows <- ceiling(n / cols)
   old_par <- par(mfrow = c(rows, cols),
-                 mar = c(3, 3, 2.5, 0.8),
-                 mgp = c(1.7, 0.5, 0),
-                 oma = c(0, 0, 1.5, 0))
+                 mar = c(3.2, 3.2, 2.8, 1),
+                 mgp = c(1.8, 0.5, 0),
+                 oma = c(0, 0, 2, 0),
+                 bg  = "#FAFAFA")
   on.exit(par(old_par))
 
   for (i in seq_len(n)) {
@@ -1355,61 +1357,107 @@ plot_dsge <- function(result, n = 9L,
     if (isTRUE(use_std)) {
       null <- (null - mean(null)) / sd(null)
       obs  <- top$dsge_std[i]
-      # Recompute p-value from standardised null
-      p_val <- mean(null >= obs)
     } else {
       obs  <- top$dsge[i]
     }
 
-    # ---- Density curve ----
-    d <- density(null)
-    xlim <- range(c(d$x, obs, null))
-    # Add a little space on the right to avoid line touching the edge
-    xlim[2] <- xlim[2] + 0.05 * diff(xlim)
-    xlab <- if (isTRUE(use_std)) "DSGE (standardised)" else "DSGE"
-    plot(d, xlim = xlim, main = "",
-         xlab = xlab, ylab = "Density",
-         col = col_null, lwd = 2, las = 1, yaxt = "n")
+    # ---- Kernel density of null ----
+    d_emp <- density(null)
 
-    # ---- Title: GO name + ontology aspect + ID (truncate if too long) ----
-    if (nchar(nm) > 40) nm <- paste0(substr(nm, 1, 37), "...")
-    name_line <- if (nzchar(asp)) paste0(nm, " (", asp, ")") else nm
-    title(main = name_line, cex.main = cex_main, line = 0.8)
-    title(main = bquote(italic(.(go_id))), cex.main = cex_main, line = -0.2)
-
-    # ---- GPD tail region highlight ----
+    # ---- GPD fit for this size group ----
     gpd <- if (isTRUE(use_std)) {
       if ("null_gpd_std" %in% names(result)) result$null_gpd_std[[key]]
     } else {
       result$null_gpd[[key]]
     }
+
+    # ---- Build combined density (empirical bulk + GPD tail) ----
+    x_max_display <- max(d_emp$x, obs)
+    x_max_display <- x_max_display + 0.08 * diff(range(c(d_emp$x, obs, null)))
+
     if (!is.null(gpd)) {
-      usr <- par("usr")
-      y_bottom <- usr[3]
-      # Semi-transparent rectangle marking the tail region
-      rect(gpd$u, y_bottom, usr[2], usr[4],
-           col = col_tail, border = NA)
-      # Redraw density curve on top
-      lines(d, col = col_null, lwd = 2)
-      # Threshold vertical line (thin dashed)
-      abline(v = gpd$u, col = "#888888", lty = 3, lwd = 0.8)
+      # Safety margin: when shape < 0, adjust shape so GPD tail extends
+      # to x_max_display, matching the logic in eval_gpd_p()
+      shape_plot <- gpd$shape
+      if (isTRUE(shape_plot < 0)) {
+        theoretical_max <- gpd$u - gpd$scale / shape_plot
+        if (isTRUE(x_max_display > theoretical_max)) {
+          shape_plot <- -gpd$scale / ((x_max_display - gpd$u) * safety_margin)
+        }
+      }
+
+      x_tail <- seq(gpd$u, x_max_display, length.out = 300)
+      y_tail <- gpd$pat * evd::dgpd(x_tail - gpd$u,
+                                     scale = gpd$scale, shape = shape_plot)
+      keep   <- d_emp$x <= gpd$u
+      d <- list(x = c(d_emp$x[keep], x_tail),
+                y = c(d_emp$y[keep], y_tail),
+                tail_idx = (length(which(keep)) + 1):(length(which(keep)) + length(x_tail)))
+    } else {
+      d <- list(x = d_emp$x, y = d_emp$y, tail_idx = integer(0))
     }
 
-    # ---- Observed DSGE vertical line ----
+    # ---- Plot ----
+    xlim <- range(c(d$x, obs, null))
+    xlim[2] <- xlim[2] + 0.05 * diff(xlim)
+    xlab <- if (isTRUE(use_std)) "DSGE (std)" else "DSGE"
+
+    # Empty plot with light background
+    plot(NA, xlim = xlim, ylim = c(0, max(d$y) * 1.08),
+         main = "", xlab = xlab, ylab = "Density",
+         las = 1, yaxt = "n",
+         col.axis = "#333333", col.lab = "#333333",
+         bty = "n")
+
+    # Light panel grid
+    grid_col <- "#E8E8E8"
+    usr <- par("usr")
+    abline(h = pretty(par("usr")[3:4]), col = grid_col, lwd = 0.4)
+    abline(v = pretty(par("usr")[1:2]), col = grid_col, lwd = 0.4)
+
+    # ---- Density fill + line ----
+    # Fill under curve (semi-transparent null color)
+    polygon(c(d$x, rev(d$x)), c(d$y, rep(0, length(d$y))),
+            col = paste0(col_null, "20"), border = NA)
+    # GPD tail portion filled with tail color
+    if (length(d$tail_idx) > 0) {
+      idx <- d$tail_idx
+      polygon(c(d$x[idx], rev(d$x[idx])),
+              c(d$y[idx], rep(0, length(idx))),
+              col = paste0(col_tail, "25"), border = NA)
+    }
+    # Density line
+    lines(d$x, d$y, col = col_null, lwd = 2)
+
+    # ---- Titles ----
+    if (nchar(nm) > 42) nm <- paste0(substr(nm, 1, 39), "...")
+    name_line <- if (nzchar(asp)) paste0(nm, " (", asp, ")") else nm
+    title(main = name_line, cex.main = cex_main, line = 1, font.main = 1,
+          col.main = "#222222")
+    title(main = go_id, cex.main = cex_main * 0.85, line = 0.2,
+          font.main = 3, col.main = "#666666")
+
+    # ---- GPD threshold line ----
+    if (!is.null(gpd))
+      abline(v = gpd$u, col = col_thr, lty = 3, lwd = 0.7)
+
+    # ---- Observed DSGE line ----
     abline(v = obs, col = col_obs, lwd = 2.5, lty = 2)
 
-    # ---- p-value annotation (with heterogeneity info if available) ----
+    # ---- Annotation (always show observed value + p-value + FDR) ----
     p_text    <- if (p_val < 0.001) sprintf("p = %.1e", p_val) else sprintf("p = %.3f", p_val)
-    padj_text <- if (p_adj < 0.001) sprintf("p.adj = %.1e", p_adj) else sprintf("p.adj = %.3f", p_adj)
+    padj_text <- if (p_adj < 0.001) sprintf("FDR = %.1e", p_adj) else sprintf("FDR = %.3f", p_adj)
+
     if (isTRUE(use_std)) {
       leg_labels <- c(sprintf("DSGE_std = %.3f", obs), p_text, padj_text)
     } else {
       leg_labels <- c(sprintf("DSGE = %.3f", obs), p_text, padj_text)
     }
-    leg_cols   <- c(col_obs, "black", "black")
-    leg_lty    <- c(2, 0, 0)
-    leg_lwd    <- c(2.5, NA, NA)
+    leg_cols <- c(col_obs, "#333333", "#333333")
+    leg_lty  <- c(2, 0, 0)
+    leg_lwd  <- c(2.5, NA, NA)
 
+    # ---- Heterogeneity annotation ----
     has_het <- "gini" %in% names(top) && "null_gini_raw" %in% names(result)
     if (has_het) {
       gini_val <- top$gini[i]
@@ -1421,29 +1469,33 @@ plot_dsge <- function(result, n = 9L,
       dir_text <- if (!is.na(het_pval) && het_pval < 0.05) {
         p_left <- sum(result$null_gini_raw[[key]] <= gini_val) /
                   length(result$null_gini_raw[[key]])
-        if (p_left < 0.5) " (heterogeneous)" else " (uniform)"
+        if (p_left < 0.5) " (het)" else " (uniform)"
       } else ""
       leg_labels <- c(leg_labels, gini_text, cv_text, paste0(het_text, dir_text))
-      leg_cols   <- c(leg_cols, "black", "black", "black")
+      leg_cols   <- c(leg_cols, "#333333", "#333333", "#333333")
       leg_lty    <- c(leg_lty, 0, 0, 0)
       leg_lwd    <- c(leg_lwd, NA, NA, NA)
     }
+
+    # ---- Legend in the top-left corner ----
     legend("topleft",
            legend = leg_labels,
            col    = leg_cols,
            lty    = leg_lty,
            lwd    = leg_lwd,
            pch    = rep(NA, length(leg_labels)),
-           cex    = 0.65, bty = "n", inset = 0.02)
+           cex    = 0.6, bty = "n", inset = 0.02,
+           text.col = "#333333")
   }
 
   # ---- Overall title ----
   if (!is.null(go_ids)) {
-    title_text <- "Selected Pathways -- Null Distribution vs. Observed DSGE"
+    title_text <- "Selected Pathways"
   } else {
-    title_text <- sprintf("Top %d Pathways -- Null Distribution vs. Observed DSGE", n)
+    title_text <- sprintf("Top %d Pathways", n)
   }
-  title(main = title_text, outer = TRUE, cex.main = 1.1, line = -0.5)
+  title(main = title_text, outer = TRUE, cex.main = 1.2, line = -0.2,
+        font.main = 1, col.main = "#222222")
 }
 
 
