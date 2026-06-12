@@ -39,6 +39,10 @@ plot_dsge(result, go_ids = c("GO:0007264", "GO:0018108"))
 
 Key parameters: `min_size`, `max_size`, `n_perm`, `use_gpd`, `directional` (with `direction_vec`), `nds_top_frac` , `n_cores`.
 
+## Documentation
+
+For detailed documentation with worked examples, parameter references, and diagnostic plots, see the [DSGE Wiki](https://github.com/LHJLab/DSGE/wiki).
+
 ## License
 
 MIT
