@@ -1,4 +1,4 @@
-[![R-CMD-check](https://github.com/LHJLab/DSGE/actions/workflows/R-CMD-check.yaml/badge.svg?branch=dev_v1.2.0_cpp_null)](https://github.com/LHJLab/DSGE/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/LHJLab/DSGE/actions/workflows/r.yml/badge.svg?branch=v1.2.0)](https://github.com/LHJLab/DSGE/actions/workflows/r.yml)
 
 # DSGE: Disruption Score of Gene Expression
 
