@@ -1,3 +1,5 @@
+[![R-CMD-check](https://github.com/LHJLab/DSGE/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/LHJLab/DSGE/actions/workflows/R-CMD-check.yaml)
+
 # DSGE: Disruption Score of Gene Expression
 
 Gene set-level transcriptional perturbation analysis. Converts differential expression p-values into per-gene z-scores and tests whether each gene set shows stronger perturbation than expected under a size-matched permutation null. Uses GPD tail extrapolation for extreme-value p-values.
