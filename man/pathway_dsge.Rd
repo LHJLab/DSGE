@@ -24,9 +24,11 @@ pathway_dsge(
   use_gpd = TRUE,
   gpd_threshold = 0.99,
   gpd_method = "mle",
-  safety_margin = 1.05,
+  safety_margin = 1.6,
   n_cores = 1L,
-  dsge_std = NULL
+  dsge_std = NULL,
+  p_adjust_method = "BY",
+  nds_top_frac = 0.25
 )
 }
 \arguments{
@@ -119,9 +121,9 @@ Other options: \code{"mple"}, \code{"moments"}, \code{"pwmu"},
 \code{"lme"}, \code{"mgf"}.}
 
 \item{safety_margin}{Safety margin for GPD support-constrained adjustment.
-Default \code{1.05} (5 % margin). Larger values (e.g., \code{2}) produce
-larger (more conservative) p-values for extremely extreme observations,
-avoiding double-precision underflow to zero at the cost of increased bias.}
+Default \code{1.6}. Larger values produce larger (more conservative)
+p-values for extremely extreme observations, avoiding double-precision
+underflow to zero at the cost of increased bias.}
 
 \item{n_cores}{Number of CPU cores for parallel null distribution
 generation. Default \code{1} (sequential). Set to
@@ -131,6 +133,14 @@ when multiple unique pathway sizes exist). On Windows, falls
 back to sequential with a message.}
 
 \item{dsge_std}{\strong{[Deprecated]}. Use \code{use_std} instead.}
+
+\item{p_adjust_method}{Multiple testing correction method. Passed to
+\code{stats::p.adjust()}. Default \code{"BY"} (Benjamini-Yekutieli)
+which controls FDR under arbitrary dependence.}
+
+\item{nds_top_frac}{Fraction of most-perturbed genes retained for
+NDS calculation. Default \code{0.25} (top 25%). Only used when
+\code{directional = TRUE}.}
 }
 \value{
 By default, a \code{data.frame} sorted by \code{p_adj}

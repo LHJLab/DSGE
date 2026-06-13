@@ -8,9 +8,11 @@ plot_dsge(
   result,
   n = 9L,
   go_ids = NULL,
-  col_null = "steelblue",
-  col_obs = "red",
-  col_tail = "#FFA50040",
+  col_null = "#2166AC",
+  col_tail = "#E41A1C",
+  col_obs = "#D73027",
+  col_thr = "#999999",
+  safety_margin = NULL,
   cex_main = 0.85,
   use_std = NULL
 )
@@ -30,13 +32,19 @@ directly plots these pathways, overriding \code{n}. Unmatched IDs
 are skipped with a warning.}
 
 \item{col_null}{Color of the null distribution density curve.
-Default \code{"steelblue"}.}
-
-\item{col_obs}{Color of the observed DSGE vertical line.
-Default \code{"red"}.}
+Default \code{"#2166AC"}.}
 
 \item{col_tail}{Color of the GPD tail region highlight.
-Default \code{"orange"} (semi-transparent).}
+Default \code{"#E41A1C"}.}
+
+\item{col_obs}{Color of the observed DSGE vertical line.
+Default \code{"#D73027"}.}
+
+\item{col_thr}{Color of the GPD threshold vertical line.
+Default \code{"#999999"}.}
+
+\item{safety_margin}{Safety margin for visual GPD tail extension
+in the plot. Defaults to the value from \code{pathway_dsge()} result.}
 
 \item{cex_main}{Title font scaling. Default \code{0.85}.}
 

@@ -20,7 +20,8 @@ dsge_perm_test(
   use_gpd = TRUE,
   gpd_threshold = 0.99,
   gpd_method = "mle",
-  safety_margin = 1.05
+  safety_margin = 1.6,
+  nds_top_frac = 0.25
 )
 }
 \arguments{
@@ -64,6 +65,11 @@ classify genes as up-regulated (positive direction) or
 down-regulated (negative direction). Values of exactly 0 are
 treated as up-regulated. Ignored when \code{directional = FALSE}.}
 
+\item{nds_top_frac}{Fraction of most-perturbed genes retained for
+NDS calculation. Default \code{0.25} (top 25%). Only used when
+\code{directional = TRUE}. Lower values focus on the most extreme
+genes; higher values include more genes.}
+
 \item{use_std}{Whether to compute and use standardised DSGE.
 Default \code{TRUE}. When enabled:
 \itemize{
@@ -96,9 +102,9 @@ Other options: \code{"mple"}, \code{"moments"}, \code{"pwmu"},
 \code{"lme"}, \code{"mgf"}.}
 
 \item{safety_margin}{Safety margin for GPD support-constrained adjustment.
-Default \code{1.05} (5 % margin). Larger values (e.g., \code{2}) produce
-larger (more conservative) p-values for extremely extreme observations,
-avoiding double-precision underflow to zero at the cost of increased bias.}
+Default \code{1.6}. Larger values produce larger (more conservative)
+p-values for extremely extreme observations, avoiding double-precision
+underflow to zero at the cost of increased bias.}
 }
 \value{
 A list with elements:

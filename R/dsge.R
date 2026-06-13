@@ -10,6 +10,7 @@
 #      z-scores as the pathway DSGE.
 #' @useDynLib DSGE, .registration = TRUE
 #' @importFrom Rcpp evalCpp
+#' @importFrom graphics polygon
 #   3. Generate null distributions via permutation test: randomly draw
 #      equally-sized gene sets from the background pool, compute random
 #      DSGE, repeat n times.
@@ -482,9 +483,9 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
 #'   \code{"pwmb"}, \code{"mdpd"}, \code{"med"}, \code{"pickands"},
 #'   \code{"lme"}, \code{"mgf"}.
 #' @param safety_margin Safety margin for GPD support-constrained adjustment.
-#'   Default \code{1.05} (5 % margin). Larger values (e.g., \code{2}) produce
-#'   larger (more conservative) p-values for extremely extreme observations,
-#'   avoiding double-precision underflow to zero at the cost of increased bias.
+#'   Default \code{1.6}. Larger values produce larger (more conservative)
+#'   p-values for extremely extreme observations, avoiding double-precision
+#'   underflow to zero at the cost of increased bias.
 #'
 #' @return A list with elements:
 #'   \item{observed}{observed DSGE value}
@@ -780,9 +781,9 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'   \code{"pwmb"}, \code{"mdpd"}, \code{"med"}, \code{"pickands"},
 #'   \code{"lme"}, \code{"mgf"}.
 #' @param safety_margin Safety margin for GPD support-constrained adjustment.
-#'   Default \code{1.05} (5 % margin). Larger values (e.g., \code{2}) produce
-#'   larger (more conservative) p-values for extremely extreme observations,
-#'   avoiding double-precision underflow to zero at the cost of increased bias.
+#'   Default \code{1.6}. Larger values produce larger (more conservative)
+#'   p-values for extremely extreme observations, avoiding double-precision
+#'   underflow to zero at the cost of increased bias.
 #' @param n_cores Number of CPU cores for parallel null distribution
 #'   generation. Default \code{1} (sequential). Set to
 #'   \code{parallel::detectCores()} to use all available cores.
@@ -798,6 +799,9 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'   \code{"holm"}, \code{"hochberg"}, \code{"hommel"},
 #'   \code{"bonferroni"}, \code{"BH"}, \code{"BY"}, \code{"fdr"},
 #'   \code{"none"}.
+#' @param nds_top_frac Fraction of most-perturbed genes retained for
+#'   NDS calculation. Default \code{0.25} (top 25%). Only used when
+#'   \code{directional = TRUE}.
 #'
 #' @return By default, a \code{data.frame} sorted by \code{p_adj}
 #'   ascending, with columns:
@@ -1046,7 +1050,7 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
     seed_base <- if (is.null(seed)) -1L else seed
     results <- suppressWarnings(
       parallel::mclapply(seq_along(sizes), function(s) {
-      suppressMessages(library(POT))   # forestall S3 registration noise
+      suppressMessages(requireNamespace("POT", quietly = TRUE))   # forestall S3 registration noise
       sz  <- sizes[s]
       res <- permute_null_cpp(pool_z, sz, n_perm,
                               seed_base + s,
@@ -1277,11 +1281,15 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
 #'   directly plots these pathways, overriding \code{n}. Unmatched IDs
 #'   are skipped with a warning.
 #' @param col_null Color of the null distribution density curve.
-#'   Default \code{"steelblue"}.
+#'   Default \code{"#2166AC"}.
 #' @param col_obs Color of the observed DSGE vertical line.
-#'   Default \code{"red"}.
+#'   Default \code{"#D73027"}.
 #' @param col_tail Color of the GPD tail region highlight.
-#'   Default \code{"orange"} (semi-transparent).
+#'   Default \code{"#E41A1C"}.
+#' @param col_thr Color of the GPD threshold vertical line.
+#'   Default \code{"#999999"}.
+#' @param safety_margin Safety margin for visual GPD tail extension
+#'   in the plot. Defaults to the value from \code{pathway_dsge()} result.
 #' @param cex_main Title font scaling. Default \code{0.85}.
 #' @param use_std Whether to plot standardised DSGE. Defaults to
 #'   \code{TRUE} when the result table contains a \code{dsge_std}
@@ -1289,7 +1297,7 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
 #'   \code{use_std = TRUE}), and \code{FALSE} otherwise.
 #'
 #' @return No return value; called for its side effect (plotting).
-#' @importFrom graphics abline legend lines par rect title
+#' @importFrom graphics abline legend lines par rect title polygon
 #' @importFrom stats density na.omit sd
 #' @export
 #'
