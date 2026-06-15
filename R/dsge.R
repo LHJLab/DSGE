@@ -341,6 +341,91 @@ compute_cv_batch <- function(mat, pool_z) {
 
 
 # =========================================================================
+# Multi-source helpers: detect pathway source and resolve column names
+# =========================================================================
+
+# Null-coalescing operator: returns lhs if not NULL, else rhs
+`%||%` <- function(a, b) {
+  if (!is.null(a)) a else b
+}
+
+# Detect the pathway source from an S3 class attribute on input data.
+#
+# Examines the class of the first element of pathway_genes to determine
+# which annotation source was used.
+#
+# Args:
+#   pathway_genes - named list, each element is a pathway data.frame
+#
+# Returns: character string, one of "GO", "KEGG", "REACTOME"
+detect_pathway_source <- function(pathway_genes) {
+  if (length(pathway_genes) == 0L) return("GO")
+  cls <- class(pathway_genes[[1L]])
+  if ("kegg_pathway" %in% cls)     return("KEGG")
+  if ("reactome_pathway" %in% cls) return("REACTOME")
+  "GO"  # default (backward compatible)
+}
+
+
+# Resolve column name mappings for a given pathway source.
+#
+# Returns a list of column names used internally by pathway_dsge() to
+# read pathway metadata (name, aspect) from input data.frames and to
+# determine the output column naming.
+#
+# Args:
+#   source - character string, "GO", "KEGG", or "REACTOME"
+#
+# Returns: list with elements:
+#   $id_col      - column name for pathway ID (from list names)
+#   $name_col    - column name for pathway name (within data.frames)
+#   $aspect_col  - column name for aspect/classification (or NULL)
+#   $output_cols - named vector mapping generic col to output col names
+source_column_map <- function(source) {
+  switch(source,
+    GO = list(
+      id_col      = "go_id",
+      name_col    = "go_name",
+      aspect_col  = "go_namespace",
+      output_cols = c(pathway_id = "go_id", pathway_name = "go_name",
+                      aspect = "aspect")
+    ),
+    KEGG = list(
+      id_col      = "kegg_id",
+      name_col    = "kegg_name",
+      aspect_col  = NULL,
+      output_cols = c(pathway_id = "kegg_id", pathway_name = "kegg_name")
+    ),
+    REACTOME = list(
+      id_col      = "reactome_id",
+      name_col    = "reactome_name",
+      aspect_col  = NULL,
+      output_cols = c(pathway_id = "reactome_id",
+                      pathway_name = "reactome_name")
+    ),
+    # Fallback: GO (backward compatible)
+    GO
+  )
+}
+
+
+# Resolve the default gene_id_col for a given pathway source.
+#
+# Args:
+#   source - character string, "GO", "KEGG", or "REACTOME"
+#
+# Returns: character string, default column name for gene matching
+default_gene_id_col <- function(source) {
+  switch(source,
+    GO       = "db_object_symbol",
+    KEGG     = "kegg_gene_symbol",
+    REACTOME = "reactome_gene_symbol",
+    "db_object_symbol"  # fallback
+  )
+}
+
+
+# =========================================================================
 # Exported function 1: calc_dsge -- genome-wide DSGE
 # =========================================================================
 
@@ -718,7 +803,15 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #' @param gene_names Character vector of gene names (same length as
 #'   pvalue), must be unique.
 #' @param gene_id_col Column name in pathway_genes data.frames used to
-#'   match gene names, default \code{"db_object_symbol"}.
+#'   match gene names. When \code{NULL} (the default), auto-detected from
+#'   the pathway source: \code{"db_object_symbol"} for GO,
+#'   \code{"kegg_gene_symbol"} for KEGG, \code{"reactome_gene_symbol"}
+#'   for REACTOME.
+#' @param source Pathway source. One of \code{"GO"}, \code{"KEGG"}, or
+#'   \code{"REACTOME"}. When \code{NULL} (the default), auto-detected
+#'   from the S3 class of \code{pathway_genes} elements
+#'   (\code{"kegg_pathway"} or \code{"reactome_pathway"}). Falls back
+#'   to \code{"GO"} for unclassed data.frames.
 #' @param base_mean_cutoff baseMean filter threshold, default 0.1.
 #' @param min_size Minimum number of matched genes; pathways below this
 #'   are not tested. Default 5.
@@ -804,13 +897,18 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'   \code{directional = TRUE}.
 #'
 #' @return By default, a \code{data.frame} sorted by \code{p_adj}
-#'   ascending, with columns:
-#'   \code{go_id}, \code{go_name}, \code{aspect}, \code{n_pathway},
-#'   \code{n_matched}, \code{dsge}, \code{p_value}, \code{p_adj}.
-#'   \code{aspect} is the GO ontology classification:
+#'   ascending. The pathway ID and name columns depend on the source:
+#'   \itemize{
+#'   \item For GO: \code{go_id}, \code{go_name}, \code{aspect}
+#'   \item For KEGG: \code{kegg_id}, \code{kegg_name}
+#'   \item For REACTOME: \code{reactome_id}, \code{reactome_name}
+#'   }
+#'   All sources include: \code{n_pathway}, \code{n_matched},
+#'   \code{dsge}, \code{p_value}, \code{p_adj}.
+#'
+#'   For GO sources, \code{aspect} is the ontology classification:
 #'   \code{"BP"} (Biological Process), \code{"MF"} (Molecular Function),
-#'   \code{"CC"} (Cellular Component). If \code{get_pathway_genes()} was
-#'   called without \code{go_names}, the \code{aspect} column is empty.
+#'   \code{"CC"} (Cellular Component).
 #'
 #'   When \code{heterogeneity = TRUE}, additionally includes:
 #'   \code{gini}, \code{cv}, \code{het_p_value}, \code{het_p_adj}.
@@ -849,7 +947,8 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #' head(result)
 #' }
 pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
-                         gene_id_col       = "db_object_symbol",
+                         gene_id_col       = NULL,
+                         source            = NULL,
                          base_mean_cutoff  = 0.1,
                          min_size          = 5L,
                          max_size          = 500L,
@@ -880,7 +979,6 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   if (!is.null(base_mean))
     stopifnot(length(pvalue) == length(base_mean))
   stopifnot(length(pvalue) == length(gene_names))
-  stopifnot(is.character(gene_id_col), length(gene_id_col) == 1L)
   stopifnot(min_size >= 1L, n_perm >= 1L)
   p_adjust_method <- match.arg(p_adjust_method,
                                c("holm", "hochberg", "hommel",
@@ -890,6 +988,22 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
                 !is.null(direction_vec))
     stopifnot(length(direction_vec) == length(pvalue))
   }
+
+  # ---- Source detection ----
+  if (is.null(source)) {
+    source <- detect_pathway_source(pathway_genes)
+  } else {
+    source <- match.arg(source, c("GO", "KEGG", "REACTOME"))
+  }
+
+  # ---- Resolve gene_id_col by source ----
+  if (is.null(gene_id_col)) {
+    gene_id_col <- default_gene_id_col(source)
+  }
+  stopifnot(is.character(gene_id_col), length(gene_id_col) == 1L)
+
+  # ---- Resolve column mappings for this source ----
+  colmap <- source_column_map(source)
 
   # =========================================================================
   # Step 1: Build DESeq2 gene pool
@@ -943,19 +1057,21 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   # =========================================================================
   # Step 2: Match each pathway's genes to the gene pool
   # =========================================================================
-  go_ids    <- names(pathway_genes)
+  pathway_ids   <- names(pathway_genes)
   n_pathway <- vapply(pathway_genes, nrow, integer(1L))
-  go_name   <- character(length(go_ids))
-  go_aspect <- character(length(go_ids))
-  matched   <- vector("list", length(go_ids))
+  pathway_names <- character(length(pathway_ids))
+  pathway_aspect <- character(length(pathway_ids))
+  matched   <- vector("list", length(pathway_ids))
 
   for (i in seq_along(pathway_genes)) {
     df <- pathway_genes[[i]]
     g  <- if (gene_id_col %in% names(df)) df[[gene_id_col]] else character(0L)
-    if ("go_name" %in% names(df) && nrow(df) > 0)
-      go_name[i] <- df$go_name[1]
-    if ("go_namespace" %in% names(df) && nrow(df) > 0)
-      go_aspect[i] <- df$go_namespace[1]
+    # Read pathway name from source-specific column
+    if (colmap$name_col %in% names(df) && nrow(df) > 0)
+      pathway_names[i] <- df[[colmap$name_col]][1]
+    # Read aspect from source-specific column (GO only)
+    if (!is.null(colmap$aspect_col) && colmap$aspect_col %in% names(df) && nrow(df) > 0)
+      pathway_aspect[i] <- df[[colmap$aspect_col]][1]
     matched[[i]] <- match(g, names(pool_z), nomatch = 0L)
     matched[[i]] <- matched[[i]][matched[[i]] > 0L]
   }
@@ -968,9 +1084,9 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   if (sum(keep_pw) == 0)
     stop("No pathways with ", min_size, " <= n_matched <= ", max_size, call. = FALSE)
 
-  go_ids    <- go_ids[keep_pw]
-  go_name   <- go_name[keep_pw]
-  go_aspect <- go_aspect[keep_pw]
+  pathway_ids   <- pathway_ids[keep_pw]
+  pathway_names <- pathway_names[keep_pw]
+  pathway_aspect <- pathway_aspect[keep_pw]
   n_pathway <- n_pathway[keep_pw]
   n_matched <- n_matched[keep_pw]
   matched   <- matched[keep_pw]
@@ -1198,9 +1314,8 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   # Step 9: Assemble results, sorted by p_adj ascending
   # =========================================================================
   result <- data.frame(
-    go_id      = go_ids,
-    go_name    = go_name,
-    aspect     = go_aspect,
+    pathway_id   = pathway_ids,
+    pathway_name = pathway_names,
     n_pathway  = as.integer(n_pathway),
     n_matched  = as.integer(n_matched),
     dsge       = observed,
@@ -1209,6 +1324,24 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
     stringsAsFactors = FALSE,
     row.names = NULL
   )
+
+  # Rename to source-specific columns and add aspect (GO only)
+  result_names <- names(result)
+  result_names[result_names == "pathway_id"]   <- colmap$output_cols["pathway_id"]
+  result_names[result_names == "pathway_name"] <- colmap$output_cols["pathway_name"]
+  names(result) <- result_names
+
+  if ("aspect" %in% names(colmap$output_cols)) {
+    # Insert aspect after pathway_name
+    name_pos <- which(names(result) == colmap$output_cols["pathway_name"])
+    result <- data.frame(
+      result[, seq_len(name_pos), drop = FALSE],
+      aspect = pathway_aspect,
+      result[, seq(name_pos + 1, ncol(result)), drop = FALSE],
+      stringsAsFactors = FALSE,
+      row.names = NULL
+    )
+  }
   if (isTRUE(use_std)) {
     # Insert dsge_std immediately after dsge column
     dsge_pos <- which(names(result) == "dsge")
@@ -1241,11 +1374,15 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   result <- result[order(result$p_adj), ]
   rownames(result) <- NULL
 
+  # Store pathway source for downstream functions (e.g. plot_dsge)
+  attr(result, "pathway_source") <- source
+
   # If null distribution data is not needed, return data.frame directly
   if (!isTRUE(return_null)) return(result)
 
   # Return list with table and null distributions (for plot_dsge())
   out <- list(table = result, null_raw = null_raw,
+              pathway_source = source,
               safety_margin = safety_margin)
   if (isTRUE(use_gpd)) {
     out$null_gpd <- null_gpd
@@ -1273,13 +1410,14 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
 #' @param result List returned by \code{\link{pathway_dsge}()} with
 #'   \code{return_null = TRUE} (contains \code{table}, \code{null_raw},
 #'   \code{null_gpd}).
-#' @param n When \code{go_ids = NULL}, the top \code{n} most significant
-#'   pathways (by p_adj ascending) are plotted. Default 9. Ignored when
-#'   \code{go_ids} is specified.
-#' @param go_ids Optional character vector of GO term IDs to plot
-#'   (e.g. \code{c("GO:0007156", "GO:0007268")}). When provided,
-#'   directly plots these pathways, overriding \code{n}. Unmatched IDs
-#'   are skipped with a warning.
+#' @param n When \code{pathway_ids} (or \code{go_ids}) is \code{NULL},
+#'   the top \code{n} most significant pathways (by p_adj ascending) are
+#'   plotted. Default 9. Ignored when \code{pathway_ids} is specified.
+#' @param pathway_ids Optional character vector of pathway IDs to plot
+#'   (e.g. GO IDs, KEGG IDs, or Reactome IDs depending on source). When
+#'   provided, directly plots these pathways, overriding \code{n}.
+#'   Unmatched IDs are skipped with a warning.
+#' @param go_ids \strong{[Deprecated]}. Use \code{pathway_ids} instead.
 #' @param col_null Color of the null distribution density curve.
 #'   Default \code{"#2166AC"}.
 #' @param col_obs Color of the observed DSGE vertical line.
@@ -1313,7 +1451,8 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
 #' plot_dsge(result, n = 9, use_std = TRUE)
 #' }
 plot_dsge <- function(result, n = 9L,
-                       go_ids   = NULL,
+                       pathway_ids   = NULL,
+                       go_ids        = NULL,
                        col_null = "#2166AC",
                        col_tail = "#E41A1C",
                        col_obs  = "#D73027",
@@ -1324,6 +1463,20 @@ plot_dsge <- function(result, n = 9L,
   # ---- Input check ----
   if (!is.list(result) || !all(c("table", "null_raw") %in% names(result)))
     stop("'result' must be from pathway_dsge(..., return_null = TRUE)", call. = FALSE)
+
+  # ---- Detect pathway source ----
+  source <- result$pathway_source %||%
+            attr(result$table, "pathway_source") %||% "GO"
+
+  # Resolve column names by source
+  id_col <- switch(source,
+    GO       = "go_id",
+    KEGG     = "kegg_id",
+    REACTOME = "reactome_id")
+  name_col <- switch(source,
+    GO       = "go_name",
+    KEGG     = "kegg_name",
+    REACTOME = "reactome_name")
 
   # Auto-read safety_margin from result; user can still override
   if (is.null(safety_margin))
@@ -1339,13 +1492,15 @@ plot_dsge <- function(result, n = 9L,
   tbl <- result$table
 
   # ---- Select pathways to plot ----
-  if (!is.null(go_ids)) {
-    idx <- match(go_ids, tbl$go_id)
+  # pathway_ids is the new param; go_ids is the deprecated alias
+  ids_param <- pathway_ids %||% go_ids
+  if (!is.null(ids_param)) {
+    idx <- match(ids_param, tbl[[id_col]])
     if (all(is.na(idx)))
-      stop("None of the specified 'go_ids' found in result", call. = FALSE)
-    miss <- go_ids[is.na(idx)]
+      stop("None of the specified pathway IDs found in result", call. = FALSE)
+    miss <- ids_param[is.na(idx)]
     if (length(miss) > 0)
-      warning("GO id(s) not found: ", paste(miss, collapse = ", "), call. = FALSE)
+      warning("Pathway ID(s) not found: ", paste(miss, collapse = ", "), call. = FALSE)
     top <- tbl[na.omit(idx), ]
   } else {
     n   <- min(n, nrow(tbl))
@@ -1366,8 +1521,8 @@ plot_dsge <- function(result, n = 9L,
   for (i in seq_len(n)) {
     key     <- as.character(top$n_matched[i])
     null    <- result$null_raw[[key]]
-    nm      <- top$go_name[i]
-    go_id   <- top$go_id[i]
+    nm      <- top[[name_col]][i]
+    pw_id   <- top[[id_col]][i]
     p_val   <- top$p_value[i]
     p_adj   <- top$p_adj[i]
     asp     <- if ("aspect" %in% names(top)) top$aspect[i] else ""
@@ -1453,7 +1608,7 @@ plot_dsge <- function(result, n = 9L,
     name_line <- if (nzchar(asp)) paste0(nm, " (", asp, ")") else nm
     title(main = name_line, cex.main = cex_main, line = 1, font.main = 1,
           col.main = "#222222")
-    title(main = go_id, cex.main = cex_main * 0.85, line = 0.2,
+    title(main = pw_id, cex.main = cex_main * 0.85, line = 0.2,
           font.main = 3, col.main = "#666666")
 
     # ---- GPD threshold line ----
@@ -1508,7 +1663,7 @@ plot_dsge <- function(result, n = 9L,
   }
 
   # ---- Overall title ----
-  if (!is.null(go_ids)) {
+  if (!is.null(pathway_ids) || !is.null(go_ids)) {
     title_text <- "Selected Pathways"
   } else {
     title_text <- sprintf("Top %d Pathways", n)
@@ -1802,7 +1957,14 @@ plot_dsge_volcano <- function(de_results,
   # ---- Pathway-level DSGE stats ----
   if (!is.null(dsge_result)) {
     tbl <- if (is.data.frame(dsge_result)) dsge_result else dsge_result$table
-    row_idx <- which(tbl$go_id == go_id)
+    # Resolve pathway ID column from table source attribute or GO default
+    tbl_source <- attr(tbl, "pathway_source") %||% "GO"
+    tbl_id_col <- switch(tbl_source,
+      GO       = "go_id",
+      KEGG     = "kegg_id",
+      REACTOME = "reactome_id",
+      "go_id")
+    row_idx <- which(tbl[[tbl_id_col]] == go_id)
     if (length(row_idx) > 0) {
       r <- tbl[row_idx[1], ]
       dsge_std_val <- if ("dsge_std" %in% names(r)) r$dsge_std else NA
