@@ -1,6 +1,6 @@
-[![R-CMD-check](https://github.com/LHJLab/DSGE/actions/workflows/R-CMD-check.yaml/badge.svg?branch=v1.2.0)](https://github.com/LHJLab/DSGE/actions/workflows/R-CMD-check.yaml)
-[![R package](https://github.com/LHJLab/DSGE/actions/workflows/R-package.yaml/badge.svg?branch=v1.2.0)](https://github.com/LHJLab/DSGE/actions/workflows/R-package.yaml)
-[![lint](https://github.com/LHJLab/DSGE/actions/workflows/lint.yaml/badge.svg?branch=v1.2.0)](https://github.com/LHJLab/DSGE/actions/workflows/lint.yaml)
+[![R-CMD-check](https://github.com/LHJLab/DSGE/actions/workflows/R-CMD-check.yaml/badge.svg?branch=v1.3.0)](https://github.com/LHJLab/DSGE/actions/workflows/R-CMD-check.yaml)
+[![R package](https://github.com/LHJLab/DSGE/actions/workflows/R-package.yaml/badge.svg?branch=v1.3.0)](https://github.com/LHJLab/DSGE/actions/workflows/R-package.yaml)
+[![lint](https://github.com/LHJLab/DSGE/actions/workflows/lint.yaml/badge.svg?branch=v1.3.0)](https://github.com/LHJLab/DSGE/actions/workflows/lint.yaml)
 
 # DSGE: Disruption Score of Gene Expression
 
