@@ -23,7 +23,7 @@ jobs:
         with:
           extra-packages: any::lintr
           needs: check
-          dependencies: Depends, Imports, LinkingTo, Suggests
+          dependencies: 'c("Depends", "Imports", "LinkingTo", "Suggests")'
 
       - name: Lint
         run: lintr::lint_package()
