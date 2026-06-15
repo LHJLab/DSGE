@@ -93,27 +93,24 @@ get_pathway_genes_reactome <- function(orgdb,
     stop("'orgdb' must be an OrgDb object (e.g. org.Hs.eg.db)", call. = FALSE)
 
   # ---- Get pathway-to-gene mappings from reactome.db ----
-  # reactomePATHID2EXTID is an environment (hash map) of pathway ID -> Entrez IDs
-  p2e <- reactome.db::reactomePATHID2EXTID
+  # reactomePATHID2EXTID is an AnnDbBimap (S4), not an environment.
+  # toTable() converts it to a data.frame (path_id, gene_id).
+  gs_data <- suppressWarnings(
+    AnnotationDbi::toTable(reactome.db::reactomePATHID2EXTID)
+  )
 
-  # Get all pathway IDs and filter by species prefix
-  all_path_ids <- ls(envir = p2e)
+  # Rename columns positionally: 1st = pathway ID, 2nd = Entrez ID
+  colnames(gs_data)[1:2] <- c("reactome_id", "entrez_id")
+
+  # Filter by species prefix on pathway ID
   if (!is.null(species_prefix)) {
-    all_path_ids <- grep(paste0("^", species_prefix), all_path_ids, value = TRUE)
+    gs_data <- gs_data[grepl(paste0("^", species_prefix), gs_data$reactome_id), ,
+                       drop = FALSE]
   }
 
-  if (length(all_path_ids) == 0L)
+  if (nrow(gs_data) == 0L)
     stop("No Reactome pathways found for prefix '", species_prefix, "'",
          call. = FALSE)
-
-  # Build data.frame: pathway_id, entrez_id
-  gs_list <- lapply(all_path_ids, function(pid) {
-    entrez_ids <- get(pid, envir = p2e)
-    data.frame(reactome_id = pid, entrez_id = entrez_ids,
-               stringsAsFactors = FALSE)
-  })
-  gs_data <- do.call(rbind, gs_list)
-  rownames(gs_data) <- NULL
 
   # ---- Resolve gene symbols from OrgDb ----
   all_entrez <- unique(gs_data$entrez_id)
