@@ -3,8 +3,11 @@ Type: Package
 Title:  Disruption Score of Gene Expression -- a statistical framework
         for geneset-level transcriptional perturbation analysis
 Version: 1.2.0
-Authors@R: person(given = "Huijuan", family = "Li",
-    email = "lihuijuan@xzhmu.edu.cn", role = c("aut", "cre"))
+Authors@R: c(
+    person(given = "Pingwei", family = "Guo",
+           email = "1489413126@qq.com", role = c("aut", "cre")),
+    person(given = "Huijuan", family = "Li",
+           email = "lihuijuan@xzhmu.edu.cn", role = "aut"))
 Description: Computes pathway-level transcriptional disruption scores
     from differential expression p-values using permutation tests with
     GPD tail extrapolation and FDR correction.
