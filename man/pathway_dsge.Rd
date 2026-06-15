@@ -9,7 +9,8 @@ pathway_dsge(
   pvalue,
   base_mean = NULL,
   gene_names,
-  gene_id_col = "db_object_symbol",
+  gene_id_col = NULL,
+  source = NULL,
   base_mean_cutoff = 0.1,
   min_size = 5L,
   max_size = 500L,
@@ -47,7 +48,16 @@ same length as pvalue. Pass NULL to skip expression-level filtering.}
 pvalue), must be unique.}
 
 \item{gene_id_col}{Column name in pathway_genes data.frames used to
-match gene names, default \code{"db_object_symbol"}.}
+match gene names. When \code{NULL} (the default), auto-detected from
+the pathway source: \code{"db_object_symbol"} for GO,
+\code{"kegg_gene_symbol"} for KEGG, \code{"reactome_gene_symbol"}
+for REACTOME.}
+
+\item{source}{Pathway source. One of \code{"GO"}, \code{"KEGG"}, or
+\code{"REACTOME"}. When \code{NULL} (the default), auto-detected
+from the S3 class of \code{pathway_genes} elements
+(\code{"kegg_pathway"} or \code{"reactome_pathway"}). Falls back
+to \code{"GO"} for unclassed data.frames.}
 
 \item{base_mean_cutoff}{baseMean filter threshold, default 0.1.}
 
@@ -144,13 +154,14 @@ NDS calculation. Default \code{0.25} (top 25%). Only used when
 }
 \value{
 By default, a \code{data.frame} sorted by \code{p_adj}
-  ascending, with columns:
-  \code{go_id}, \code{go_name}, \code{aspect}, \code{n_pathway},
-  \code{n_matched}, \code{dsge}, \code{p_value}, \code{p_adj}.
-  \code{aspect} is the GO ontology classification:
-  \code{"BP"} (Biological Process), \code{"MF"} (Molecular Function),
-  \code{"CC"} (Cellular Component). If \code{get_pathway_genes()} was
-  called without \code{go_names}, the \code{aspect} column is empty.
+  ascending. The pathway ID and name columns depend on the source:
+  \itemize{
+  \item For GO: \code{go_id}, \code{go_name}, \code{aspect}
+  \item For KEGG: \code{kegg_id}, \code{kegg_name}
+  \item For REACTOME: \code{reactome_id}, \code{reactome_name}
+  }
+  All sources include: \code{n_pathway}, \code{n_matched},
+  \code{dsge}, \code{p_value}, \code{p_adj}.
 
   When \code{heterogeneity = TRUE}, additionally includes:
   \code{gini}, \code{cv}, \code{het_p_value}, \code{het_p_adj}.
@@ -177,7 +188,7 @@ By default, a \code{data.frame} sorted by \code{p_adj}
         values are CV null distribution vectors}
 }
 \description{
-Computes DSGE for each GO pathway, generates permutation null
+Computes DSGE for each pathway, generates permutation null
 distributions grouped by number of matched genes, computes p-values
 using GPD tail extrapolation, and applies Benjamini-Hochberg FDR
 correction.
