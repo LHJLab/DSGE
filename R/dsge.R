@@ -404,7 +404,13 @@ source_column_map <- function(source) {
                       pathway_name = "reactome_name")
     ),
     # Fallback: GO (backward compatible)
-    GO
+    list(
+      id_col      = "go_id",
+      name_col    = "go_name",
+      aspect_col  = "go_namespace",
+      output_cols = c(pathway_id = "go_id", pathway_name = "go_name",
+                      aspect = "aspect")
+    )
   )
 }
 

@@ -7,6 +7,7 @@
 plot_dsge(
   result,
   n = 9L,
+  pathway_ids = NULL,
   go_ids = NULL,
   col_null = "#2166AC",
   col_tail = "#E41A1C",
@@ -22,11 +23,18 @@ plot_dsge(
 \code{return_null = TRUE} (contains \code{table}, \code{null_raw},
 \code{null_gpd}).}
 
-\item{n}{When \code{go_ids = NULL}, the top \code{n} most significant
-pathways (by p_adj ascending) are plotted. Default 9. Ignored when
+\item{n}{When \code{pathway_ids = NULL} and \code{go_ids = NULL},
+the top \code{n} most significant pathways (by p_adj ascending) are
+plotted. Default 9. Ignored when \code{pathway_ids} or
 \code{go_ids} is specified.}
 
-\item{go_ids}{Optional character vector of GO term IDs to plot
+\item{pathway_ids}{Optional character vector of pathway IDs to plot
+(e.g. GO IDs, KEGG IDs, or Reactome IDs depending on source). When
+provided, directly plots these pathways, overriding \code{n}.
+Unmatched IDs are skipped with a warning.}
+
+\item{go_ids}{\strong{[Deprecated]}. Use \code{pathway_ids} instead.
+Optional character vector of GO term IDs to plot
 (e.g. \code{c("GO:0007156", "GO:0007268")}). When provided,
 directly plots these pathways, overriding \code{n}. Unmatched IDs
 are skipped with a warning.}
@@ -68,8 +76,8 @@ result <- pathway_dsge(pw, res$pvalue, res$baseMean, res$geneName,
                        seed = 42, return_null = TRUE, heterogeneity = TRUE)
 # Top 9
 plot_dsge(result, n = 9)
-# Selected GO terms
-plot_dsge(result, go_ids = c("GO:0007156", "GO:0007268"))
+# Selected pathways
+plot_dsge(result, pathway_ids = c("GO:0007156", "GO:0007268"))
 # Standardised scale
 plot_dsge(result, n = 9, use_std = TRUE)
 }
