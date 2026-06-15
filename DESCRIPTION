@@ -21,6 +21,8 @@ LinkingTo:
     Rcpp
 Suggests:
     AnnotationDbi,
-    GO.db
+    GO.db,
+    KEGGREST,
+    reactome.db
 Config/roxygen2/version: 8.0.0
 RoxygenNote: 7.3.3
