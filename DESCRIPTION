@@ -2,7 +2,7 @@ Package: DSGE
 Type: Package
 Title:  Disruption Score of Gene Expression -- a statistical framework
         for geneset-level transcriptional perturbation analysis
-Version: 1.2.0
+Version: 1.3.0
 Authors@R: c(
     person(given = "Pingwei", family = "Guo",
            email = "1489413126@qq.com", role = c("aut", "cre")),
