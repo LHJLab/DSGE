@@ -8,7 +8,7 @@
 #      (|z-score|); larger z means stronger transcriptional perturbation.
 #   2. For each GO pathway (gene set), compute the mean of member gene
 #      z-scores as the pathway DSGE.
-#' @useDynLib DSGE, .registration = TRUE
+#' @useDynLib DSGEr, .registration = TRUE
 #' @importFrom Rcpp evalCpp
 #' @importFrom graphics polygon
 #   3. Generate null distributions via permutation test: randomly draw
