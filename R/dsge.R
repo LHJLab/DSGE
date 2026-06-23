@@ -17,7 +17,7 @@
 #   4. For extreme observations (above the 99th percentile), fit a
 #      Generalized Pareto Distribution (GPD) to the tail of the null
 #      distribution for extrapolation, yielding precise extreme p-values.
-#   5. Apply Benjamini-Hochberg FDR correction across all pathways.
+#   5. Apply FDR correction across all pathways.
 #
 # Key formulas (computed on each drawn gene subset):
 #   Per-gene z-score:    z_i = |Φ⁻¹(1 - p_i/2)|
