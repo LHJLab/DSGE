@@ -151,14 +151,5 @@ gene_names <- paste0("gene", 1:500)
 forebrain_like <- paste0("gene", 1:30)
 dsge_perm_test(forebrain_like, pvals, base_mean, gene_names,
                n_perm = 100, seed = 42, progress = FALSE)
-\donttest{
-res <- DESeq2::results(dds)
-dsge_perm_test(gene_list = forebrain_genes,
-               pvalue = res$pvalue, base_mean = res$baseMean,
-               gene_names = rownames(res), seed = 42)
-# Without standardised DSGE
-dsge_perm_test(gene_list = forebrain_genes,
-               pvalue = res$pvalue, base_mean = res$baseMean,
-               gene_names = rownames(res), seed = 42, use_std = FALSE)
 }
 }

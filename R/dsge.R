@@ -468,10 +468,6 @@ default_gene_id_col <- function(source) {
 #' base_mean <- rexp(1000)
 #' z <- calc_dsge(pvals, base_mean)
 #' head(z)
-#' \donttest{
-#' res <- DESeq2::results(dds)
-#' calc_dsge(res$pvalue, res$baseMean)
-#' }
 calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
   # ---- Input validation ----
   if (length(pvalue) == 0)
@@ -613,16 +609,6 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
 #' forebrain_like <- paste0("gene", 1:30)
 #' dsge_perm_test(forebrain_like, pvals, base_mean, gene_names,
 #'                n_perm = 100, seed = 42, progress = FALSE)
-#' \donttest{
-#' res <- DESeq2::results(dds)
-#' dsge_perm_test(gene_list = forebrain_genes,
-#'                pvalue = res$pvalue, base_mean = res$baseMean,
-#'                gene_names = rownames(res), seed = 42)
-#' # Without standardised DSGE
-#' dsge_perm_test(gene_list = forebrain_genes,
-#'                pvalue = res$pvalue, base_mean = res$baseMean,
-#'                gene_names = rownames(res), seed = 42, use_std = FALSE)
-#' }
 dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
                            base_mean_cutoff = 0.1,
                            n_perm           = 10000L,
@@ -955,7 +941,6 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #' @export
 #'
 #' @examples
-#' \donttest{
 #' # Toy example with simulated data
 #' set.seed(42)
 #' pvals <- runif(500)
@@ -972,17 +957,6 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #' result <- pathway_dsge(pw, pvals, base_mean, gene_names,
 #'                        min_size = 1, n_perm = 100, seed = 42)
 #' head(result)
-#'
-#' # Real-world usage with external data
-#' res <- DESeq2::results(dds)
-#' gaf <- read_gaf("goa_human.gaf")
-#' go  <- read_obo("go.obo")
-#'
-#' pw <- get_pathway_genes(gaf, go_names = go, min_size = 5)
-#' result <- pathway_dsge(pw, res$pvalue, res$baseMean, rownames(res),
-#'                        seed = 42)
-#' head(result)
-#' }
 pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
                          gene_id_col       = NULL,
                          source            = NULL,

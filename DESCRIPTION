@@ -26,7 +26,8 @@ LinkingTo:
     Rcpp
 Suggests:
     AnnotationDbi,
-    GO.db
+    GO.db,
+    org.Hs.eg.db
 Enhances:
     KEGGREST,
     reactome.db

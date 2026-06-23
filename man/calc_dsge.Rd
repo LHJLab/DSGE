@@ -41,8 +41,4 @@ head(z)
 base_mean <- rexp(1000)
 z <- calc_dsge(pvals, base_mean)
 head(z)
-\donttest{
-res <- DESeq2::results(dds)
-calc_dsge(res$pvalue, res$baseMean)
-}
 }

@@ -236,7 +236,6 @@ null distribution, greatly reducing computation.
 }
 }
 \examples{
-\donttest{
 # Toy example with simulated data
 set.seed(42)
 pvals <- runif(500)
@@ -253,15 +252,4 @@ pw <- list(
 result <- pathway_dsge(pw, pvals, base_mean, gene_names,
                        min_size = 1, n_perm = 100, seed = 42)
 head(result)
-
-# Real-world usage with external data
-res <- DESeq2::results(dds)
-gaf <- read_gaf("goa_human.gaf")
-go  <- read_obo("go.obo")
-
-pw <- get_pathway_genes(gaf, go_names = go, min_size = 5)
-result <- pathway_dsge(pw, res$pvalue, res$baseMean, rownames(res),
-                       seed = 42)
-head(result)
-}
 }
