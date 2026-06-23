@@ -14,7 +14,7 @@
 #   3. Generate null distributions via permutation test: randomly draw
 #      equally-sized gene sets from the background pool, compute random
 #      DSGE, repeat n times.
-#   4. For extreme observations (above the 90th percentile), fit a
+#   4. For extreme observations (above the 99th percentile), fit a
 #      Generalized Pareto Distribution (GPD) to the tail of the null
 #      distribution for extrapolation, yielding precise extreme p-values.
 #   5. Apply Benjamini-Hochberg FDR correction across all pathways.
@@ -64,7 +64,6 @@ compute_zscore <- function(pvalue) {
 # Args:
 #   idx    - indices of genes in pool_z
 #   pool_z - raw z-scores of the full gene pool
-#   pool_z - raw z-scores of the full gene pool
 #
 # Returns: scalar DSGE
 compute_dsge <- function(idx, pool_z) {
@@ -106,11 +105,11 @@ compute_dsge_batch <- function(mat, pool_z) {
 #
 # Args:
 #   null - numeric vector, null distribution (permutation DSGE values)
-#   tail - quantile threshold, default 0.90 (fit GPD above 90th percentile)
+#   tail - quantile threshold, default 0.99 (fit GPD above 99th percentile)
 #
 # Returns:
 #   On success: list(u, scale, shape, pat); on failure: NULL
-#   u     - threshold (90th percentile)
+#   u     - threshold (99th percentile)
 #   scale - GPD scale parameter σ
 #   shape - GPD shape parameter ξ
 #   pat   - empirical proportion of null exceeding threshold, P(X > u)
@@ -173,7 +172,7 @@ fit_gpd_tail <- function(null, tail = 0.99, gpd_method = "mle") {
 #'   Must contain elements \code{u}, \code{scale}, \code{shape}, \code{pat}.
 #' @param obs Observed DSGE value.
 #' @param safety_margin Safety margin for support-constrained adjustment.
-#'   Default \code{1.2}. Larger values produce more conservative p-values.
+#'   Default \code{1.6}. Larger values produce more conservative p-values.
 #'
 #' @return Right-tail p-value in \eqn{[0, 1]}.
 #' @noRd
@@ -593,7 +592,7 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
 #'   \item{n_genes}{number of target genes matched}
 #'   \item{null}{permutation null distribution vector}
 #'   \item{p_value}{right-tail p-value (GPD tail extrapolation when
-#'         observed falls above 90th percentile; empirical ECDF otherwise)}
+#'         observed falls above the `gpd_threshold` quantile (default 99th); empirical ECDF otherwise)}
 #'   \item{ecdf}{empirical cumulative distribution function of the null}
 #'   \item{dsge_std}{(only when \code{use_std = TRUE}) standardised DSGE}
 #'   \item{nds}{(only when \code{directional = TRUE}) Normalized
@@ -809,8 +808,8 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'         size-grouped null distribution.
 #'   \item \strong{Compute p-values}: when \code{use_std = TRUE},
 #'         empirical ECDF of the standardised null vs. dsge_std; when
-#'         \code{use_std = FALSE}, GPD tail extrapolation (above 90th
-#'         percentile) + empirical ECDF on the raw null distribution.
+#'         \code{use_std = FALSE}, GPD tail extrapolation (above the
+#'         \code{gpd_threshold} quantile, default 99th) + empirical ECDF on the raw null distribution.
 #'   \item \strong{BH FDR correction}: Benjamini-Hochberg multiple
 #'         testing correction on all pathway p-values.
 #'   \item \strong{Sort and return}: ordered by p_adj ascending.
@@ -916,10 +915,6 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #'   \code{"holm"}, \code{"hochberg"}, \code{"hommel"},
 #'   \code{"bonferroni"}, \code{"BH"}, \code{"BY"}, \code{"fdr"},
 #'   \code{"none"}.
-#' @param nds_top_frac Fraction of most-perturbed genes retained for
-#'   NDS calculation. Default \code{0.25} (top 25%). Only used when
-#'   \code{directional = TRUE}.
-#'
 #' @return By default, a \code{data.frame} sorted by \code{p_adj}
 #'   ascending. The pathway ID and name columns depend on the source:
 #'   \itemize{
@@ -1290,7 +1285,7 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
   # Step 7: Compute p-value per pathway
   # =========================================================================
   # Two p-value methods:
-  #   use_gpd = TRUE  — GPD tail extrapolation when observed > 90th %ile u,
+  #   use_gpd = TRUE  — GPD tail extrapolation when observed > gpd_threshold %ile u,
   #                     with support-constrained adjustment
   #                     (arXiv:2602.22975) to avoid p = 0; empirical ECDF
   #                     otherwise (with 1/n_perm floor)
@@ -1794,7 +1789,7 @@ plot_dsge <- function(result, n = 9L,
 #' @param label_sig When \code{TRUE}, only label genes that pass the
 #'   \code{threshold}. Default \code{FALSE}. Ignored when
 #'   \code{label_genes} is provided.
-#' @param cex_label Text size for gene labels. Default \code{0.65}.
+#' @param cex_label Text size for gene labels. Default \code{0.70}.
 #' @param xlab,ylab Axis labels. Auto-generated when \code{NULL}.
 #' @param main Plot title. Default \code{NULL}, auto-generated from
 #'   GO ID and GO name.

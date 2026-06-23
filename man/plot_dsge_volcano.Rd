@@ -113,7 +113,7 @@ very large pathways where you only want to highlight a few key genes.}
 \code{threshold}. Default \code{FALSE}. Ignored when
 \code{label_genes} is provided.}
 
-\item{cex_label}{Text size for gene labels. Default \code{0.65}.}
+\item{cex_label}{Text size for gene labels. Default \code{0.70}.}
 
 \item{cex_point}{Point size for significant genes. Non-significant
 genes are plotted at \code{0.7 * cex_point}. Default \code{1.6}.}

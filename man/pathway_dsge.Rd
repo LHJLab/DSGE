@@ -154,8 +154,9 @@ All methods supported by \code{p.adjust} are valid:
 \code{"none"}.}
 
 \item{nds_top_frac}{Fraction of most-perturbed genes retained for
-NDS calculation. Default \code{0.25} (top 25%). Only used when
-\code{directional = TRUE}.}
+NDS calculation. Default \code{0.25} (top 25\%). Only used when
+\code{directional = TRUE}. Lower values focus on the most extreme
+genes; higher values include more genes.}
 }
 \value{
 By default, a \code{data.frame} sorted by \code{p_adj}
@@ -227,8 +228,8 @@ null distribution, greatly reducing computation.
         size-grouped null distribution.
   \item \strong{Compute p-values}: when \code{use_std = TRUE},
         empirical ECDF of the standardised null vs. dsge_std; when
-        \code{use_std = FALSE}, GPD tail extrapolation (above 90th
-        percentile) + empirical ECDF on the raw null distribution.
+        \code{use_std = FALSE}, GPD tail extrapolation (above the
+        \code{gpd_threshold} quantile, default 99th) + empirical ECDF on the raw null distribution.
   \item \strong{BH FDR correction}: Benjamini-Hochberg multiple
         testing correction on all pathway p-values.
   \item \strong{Sort and return}: ordered by p_adj ascending.

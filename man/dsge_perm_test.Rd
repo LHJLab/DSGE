@@ -112,7 +112,7 @@ A list with elements:
   \item{n_genes}{number of target genes matched}
   \item{null}{permutation null distribution vector}
   \item{p_value}{right-tail p-value (GPD tail extrapolation when
-        observed falls above 90th percentile; empirical ECDF otherwise)}
+        observed falls above the `gpd_threshold` quantile (default 99th); empirical ECDF otherwise)}
   \item{ecdf}{empirical cumulative distribution function of the null}
   \item{dsge_std}{(only when \code{use_std = TRUE}) standardised DSGE}
   \item{nds}{(only when \code{directional = TRUE}) Normalized
