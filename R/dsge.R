@@ -1996,7 +1996,7 @@ plot_dsge_volcano <- function(de_results,
 
       stat_lines <- character()
       if (!is.null(dsge_std_val) && !is.na(dsge_std_val))
-        stat_lines <- c(stat_lines, sprintf("DSGE\u209B\u2099\u2091 = %.2f", dsge_std_val))
+        stat_lines <- c(stat_lines, sprintf("DSGE_std = %.2f", dsge_std_val))
       if (!is.null(p_adj_val) && !is.na(p_adj_val)) {
         if (p_adj_val < 0.001)
           stat_lines <- c(stat_lines, sprintf("p.adj = %.1e", p_adj_val))
@@ -2005,7 +2005,7 @@ plot_dsge_volcano <- function(de_results,
       }
       # Mean logFC
       stat_lines <- c(stat_lines,
-                      sprintf("Mean log\u2082FC = %+.3f", mean(x_vals, na.rm = TRUE)))
+                      sprintf("Mean log2FC = %+.3f", mean(x_vals, na.rm = TRUE)))
 
       if (length(stat_lines) > 0) {
         graphics::legend("topleft",
