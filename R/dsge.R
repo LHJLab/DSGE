@@ -1814,7 +1814,7 @@ plot_dsge <- function(result, n = 9L,
 #'   stringsAsFactors = FALSE
 #' )
 #' pw <- list(
-#'   GO:0042101 = data.frame(
+#'   "GO:0042101" = data.frame(
 #'     db_object_symbol = paste0("GENE", 1:15),
 #'     go_name = "T cell receptor complex",
 #'     stringsAsFactors = FALSE
