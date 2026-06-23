@@ -1,26 +1,27 @@
 # =========================================================================
 # null_density_plot.R
-# 绘制 DSGE 零分布密度图 —— 展示不同通路大小下零分布形态的演化
-# 用于论文补充材料 (Supplementary Figure)
+# DSGE null distribution density plot -- illustrates how the null
+# distribution evolves across pathway sizes, for Supplementary Figure
 # =========================================================================
 #
-# 使用真实 DESeq2 数据的 z 分数池，生成各通路大小下的零分布，
-# 统计峰值及单尾显著性阈值，绘制密度曲线和摘要图。
+# Uses the z-score pool from real DESeq2 data to generate null
+# distributions at various pathway sizes, records peak and one-tailed
+# significance thresholds, and produces density curves and summary plots.
 #
-# 用法（在项目根目录运行）：
+# Usage (run from project root):
 #   source("inst/scripts/null_density_plot.R")
 #
-# 输出：
-#   plots/null_density_curves.pdf  —— 密度曲线图
-#   plots/null_thresholds.pdf      —— 阈值图
-#   plots/null_density_ridge.pdf   —— 脊线图（可选）
+# Output:
+#   plots/null_density_curves.pdf  —— density curves
+#   plots/null_thresholds.pdf      —— threshold plots
+#   plots/null_density_ridge.pdf   —— ridge plot (optional)
 # =========================================================================
 
-# ---- 输出目录（使用 tempdir 避免写入用户工作目录）----
+# ---- Output directory (use tempdir to avoid writing to user workspace) ----
 out_dir <- file.path(tempdir(), "plots")
 dir.create(out_dir, showWarnings = FALSE)
 
-# ---- 保存用户图形参数（脚本结束时恢复）----
+# ---- Save user graphical parameters (restore at script exit) ----
 old_par <- par(no.readonly = TRUE)
 on.exit(par(old_par))
 
@@ -35,7 +36,7 @@ res <- read.csv("inst/data_exp/limma_FLT3_IR_vs_FLT3.csv", stringsAsFactors = FA
 #res <- subset(res, geneType == "protein_coding" & geneName != ".")
 cat("  Protein-coding genes:", nrow(res), "\n")
 
-# ---- 从真实 DESeq2 结果构建 z 分数池 ----
+# ---- Build z-score pool from real DESeq2 results ----
 dsge_res <- calc_dsge(res$pvalue)
 pool_z  <- dsge_res$z_scores
 n_pool  <- length(pool_z)
@@ -43,20 +44,20 @@ n_pool  <- length(pool_z)
 cat(sprintf("Background gene pool: n=%d, mean(z)=%.4f, sd(z)=%.4f\n",
             n_pool, mean(pool_z), sd(pool_z)))
 
-# ---- 1. 参数 ----
+# ---- 1. Parameters ----
 set.seed(666)
-N_PERM     <- 100000L                          # 排列次数
-SIZES      <- seq(5, 500, by = 5)             # 通路大小序列
-SHOW_SIZES <- c(5, 10, 25, 50, 100, 200, 500) # 面板 A 展示的代表性大小
+N_PERM     <- 100000L                          # Number of permutations
+SIZES      <- seq(5, 500, by = 5)             # Pathway size sequence
+SHOW_SIZES <- c(5, 10, 25, 50, 100, 200, 500) # Representative sizes for Panel A
 
-# ---- 2. 批量生成零分布（只算一次，存下来复用） ----
+# ---- 2. Batch generate null distributions (compute once, reuse) ----
 peaks         <- numeric(length(SIZES))
 thresholds_95 <- numeric(length(SIZES))
 thresholds_99 <- numeric(length(SIZES))
 medians       <- numeric(length(SIZES))
 null_means    <- numeric(length(SIZES))
 null_sds      <- numeric(length(SIZES))
-null_store    <- vector("list", length(SIZES))  # 存 null 向量，供后续绘图复用
+null_store    <- vector("list", length(SIZES))  # Store null vectors for re-use in plotting
 names(null_store) <- as.character(SIZES)
 
 cat("\nGenerating null distributions for", length(SIZES), "pathway sizes...\n")
@@ -87,9 +88,9 @@ for (i in seq_along(SIZES)) {
 close(pb)
 cat("Done.\n")
 
-# ---- 3. 绘图 ----
+# ---- 3. Plotting ----
 
-# ========== 图 1：代表性大小的零分布密度曲线 ==========
+# ========== Fig 1: Null density curves for representative sizes ==========
 cols <- colorRampPalette(c("#56B4E9", "#0072B2", "#D55E00"))(length(SHOW_SIZES))
 
 density_info <- lapply(as.character(SHOW_SIZES), function(key) {
@@ -130,7 +131,7 @@ legend("topright",
 dev.off()
 cat(sprintf("Saved: %s/null_density_curves.pdf\n", out_dir))
 
-# ========== 图 2：峰值 & 显著性阈值 vs. 通路大小 ==========
+# ========== Fig 2: Peak & significance threshold vs. pathway size ==========
 pdf(file.path(out_dir, "null_thresholds.pdf"), width = 7, height = 6)
 par(mar = c(4.5, 4.5, 3, 1), mgp = c(2.8, 0.8, 0))
 
@@ -167,7 +168,7 @@ legend("topright",
 dev.off()
 cat(sprintf("Saved: %s/null_thresholds.pdf\n", out_dir))
 
-# ---- 4. 统计摘要表（用于论文文字引用）----
+# ---- 4. Summary statistics table (for manuscript text references) ----
 cat("\n")
 cat(paste(rep("=", 72), collapse = ""), "\n")
 cat("  NULL DISTRIBUTION SUMMARY  (based on real DESeq2 data)\n")
@@ -193,7 +194,7 @@ cat(sprintf("  Threshold gap at G=500  = %.4f  (95%% - peak)\n",
             thresholds_95[length(thresholds_95)] - peaks[length(thresholds_95)]))
 cat("\n")
 
-# ---- 5. 脊线图（可选） ----
+# ---- 5. Ridge plot (optional) ----
 DO_RIDGE <- TRUE
 if (DO_RIDGE) {
   pdf(file.path(out_dir, "null_density_ridge.pdf"), width = 10, height = 7)
@@ -203,7 +204,7 @@ if (DO_RIDGE) {
   n_ridge <- length(ridge_sizes)
   ridge_col <- colorRampPalette(c("#56B4E9", "#0072B2", "#D55E00"))(n_ridge)
 
-  # 用已存储的 null 向量确定 x 轴范围，左侧留出标签空间
+  # Use stored null vectors to determine x-axis range; leave space on left for labels
   x_dens <- range(sapply(as.character(ridge_sizes), function(key) {
     range(null_store[[key]])
   }))
@@ -235,4 +236,3 @@ if (DO_RIDGE) {
 }
 
 cat("\nAll plots generated.\n")
-
