@@ -22,7 +22,29 @@ the \code{id}, \code{name}, and \code{namespace} from each [Term]
 stanza. [Typedef] stanzas are skipped.
 }
 \examples{
-\dontrun{
+# Create a temporary OBO file for demonstration
+obo_file <- tempfile(fileext = ".obo")
+writeLines(c(
+  "format-version: 1.2",
+  "",
+  "[Term]",
+  "id: GO:0003674",
+  "name: molecular_function",
+  "namespace: molecular_function",
+  "",
+  "[Term]",
+  "id: GO:0005575",
+  "name: cellular_component",
+  "namespace: cellular_component",
+  "",
+  "[Term]",
+  "id: GO:0008150",
+  "name: biological_process",
+  "namespace: biological_process"
+), obo_file)
+go_names <- read_obo(obo_file)
+head(go_names)
+\donttest{
 go_names <- read_obo("go-basic.obo")
 head(go_names)
 }

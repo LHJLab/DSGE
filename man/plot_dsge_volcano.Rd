@@ -141,22 +141,26 @@ p-value) on the y-axis. This allows visual inspection of the direction,
 magnitude, and distribution of perturbation within a single pathway.
 }
 \examples{
-\dontrun{
-res <- read.csv("deseq2_results.csv")
-gaf <- read_gaf("goa_human.gaf")
-go  <- read_obo("go.obo")
-pw  <- get_pathway_genes(gaf, go_names = go, min_size = 15)
-dsge <- pathway_dsge(pw, res$pvalue, res$baseMean, res$geneName, seed = 42)
-
-# T cell receptor complex, with DSGE stats
-plot_dsge_volcano(res, dsge, pw, go_id = "GO:0042101")
-
-# With effect size thresholds, only label significant genes
-plot_dsge_volcano(res, dsge, pw, go_id = "GO:0032720",
-  lfc_threshold = c(-1, 1), label_sig = TRUE)
-
-# Large pathway, only label specific genes
-plot_dsge_volcano(res, pw, go_id = "GO:0005737",
-  label_genes = c("TP53", "MYC", "EGFR"))
+\donttest{
+# Build input objects with simulated data for demonstration
+set.seed(42)
+de_results <- data.frame(
+  log2FoldChange = rnorm(100, mean = 0, sd = 1.5),
+  pvalue = runif(100),
+  geneName = paste0("GENE", 1:100),
+  stringsAsFactors = FALSE
+)
+pw <- list(
+  GO:0042101 = data.frame(
+    db_object_symbol = paste0("GENE", 1:15),
+    go_name = "T cell receptor complex",
+    stringsAsFactors = FALSE
+  )
+)
+dsge <- pathway_dsge(pw, de_results$pvalue, de_results$pvalue,
+                     de_results$geneName, min_size = 1, n_perm = 100,
+                     seed = 42)
+plot_dsge_volcano(de_results, dsge, pw, go_id = "GO:0042101",
+  logFC_col = "log2FoldChange", pval_col = "pvalue", gene_col = "geneName")
 }
 }

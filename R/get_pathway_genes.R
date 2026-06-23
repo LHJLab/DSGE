@@ -57,7 +57,19 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' # Create a minimal GAF data.frame for demonstration
+#' toy_gaf <- data.frame(
+#'   db_object_id    = c("1", "2", "3", "1", "2"),
+#'   db_object_symbol = c("GENE_A", "GENE_B", "GENE_C", "GENE_A", "GENE_D"),
+#'   go_id           = c("GO:0003674", "GO:0003674", "GO:0005575",
+#'                       "GO:0005575", "GO:0005575"),
+#'   aspect          = c("F", "F", "C", "C", "C"),
+#'   evidence_code   = c("IDA", "IBA", "IDA", "IDA", "IEA"),
+#'   stringsAsFactors = FALSE
+#' )
+#' pathway_genes <- get_pathway_genes(toy_gaf, min_size = 1)
+#' pathway_genes[["GO:0003674"]]
+#' \donttest{
 #' gaf <- read_gaf("goa_human.gaf")
 #' go  <- read_obo("go.obo")
 #'

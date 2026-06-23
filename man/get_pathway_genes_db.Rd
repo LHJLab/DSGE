@@ -83,7 +83,7 @@ This function requires the \code{AnnotationDbi} package. The
   \code{BiocManager::install(c("AnnotationDbi", "GO.db"))}.
 }
 \examples{
-\dontrun{
+\donttest{
 library(org.Hs.eg.db)
 
 # All pathways, minimum 5 genes

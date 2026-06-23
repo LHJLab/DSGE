@@ -8,9 +8,17 @@
 #   source("inst/scripts/gpd_diagnostic_plot.R")
 #
 # 输出：
-#   results/plots/gpd_diagnostic_Gm{GM}.pdf  —— PDF（论文用）
-#   results/plots/gpd_diagnostic_Gm{GM}.jpg  —— JPG（快速预览）
+#   plots/gpd_diagnostic_Gm{GM}.pdf  —— PDF（论文用）
+#   plots/gpd_diagnostic_Gm{GM}.jpg  —— JPG（快速预览）
 # =========================================================================
+
+# ---- 输出目录（使用 tempdir 避免写入用户工作目录）----
+out_dir <- file.path(tempdir(), "plots")
+dir.create(out_dir, showWarnings = FALSE)
+
+# ---- 保存用户图形参数（脚本结束时恢复）----
+old_par <- par(no.readonly = TRUE)
+on.exit(par(old_par))
 
 # ---- 0. 参数 ----
 GM      <- 50          # 通路大小
@@ -168,22 +176,20 @@ draw_diagnostic <- function() {
 }
 
 # ---- 7. 输出 PDF + JPG ----
-dir.create("results/plots", showWarnings = FALSE)
-
 # PDF（先写临时文件再复制，避免 Windows 文件锁）
 pdf_tmp <- tempfile(fileext = ".pdf")
 pdf(pdf_tmp, width = 10, height = 5.5)
 draw_diagnostic()
 dev.off()
-file.copy(pdf_tmp, sprintf("results/plots/gpd_diagnostic_Gm%d.pdf", GM),
+file.copy(pdf_tmp, file.path(out_dir, sprintf("gpd_diagnostic_Gm%d.pdf", GM)),
           overwrite = TRUE)
 unlink(pdf_tmp)
-cat(sprintf("Saved: results/plots/gpd_diagnostic_Gm%d.pdf\n", GM))
+cat(sprintf("Saved: %s/gpd_diagnostic_Gm%d.pdf\n", out_dir, GM))
 
-jpeg(sprintf("results/plots/gpd_diagnostic_Gm%d.jpg", GM),
+jpeg(file.path(out_dir, sprintf("gpd_diagnostic_Gm%d.jpg", GM)),
      width = 10, height = 5.5, units = "in", res = 150, quality = 95)
 draw_diagnostic()
 dev.off()
-cat(sprintf("Saved: results/plots/gpd_diagnostic_Gm%d.jpg\n", GM))
+cat(sprintf("Saved: %s/gpd_diagnostic_Gm%d.jpg\n", out_dir, GM))
 
 cat("Done.\n")

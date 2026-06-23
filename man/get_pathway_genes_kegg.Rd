@@ -67,12 +67,8 @@ Requires the \code{AnnotationDbi} package. The \code{KEGGREST}
   Install with:
   \code{BiocManager::install(c("AnnotationDbi", "KEGGREST"))}.
 }
-\seealso{
-\code{\link{get_pathway_genes_db}} for the GO-based equivalent.
-\code{\link{get_pathway_genes_reactome}} for the Reactome equivalent.
-}
 \examples{
-\dontrun{
+\donttest{
 library(org.Hs.eg.db)
 
 # All KEGG pathways, minimum 5 genes
@@ -81,4 +77,8 @@ pw <- get_pathway_genes_kegg(org.Hs.eg.db)
 # Without fetching pathway names (offline)
 pw <- get_pathway_genes_kegg(org.Hs.eg.db, attach_path_names = FALSE)
 }
+}
+\seealso{
+\code{\link{get_pathway_genes_db}} for the GO-based equivalent.
+  \code{\link{get_pathway_genes_reactome}} for the Reactome equivalent.
 }

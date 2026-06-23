@@ -93,7 +93,7 @@ KEGG_ORG_CODES <- c(
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' library(org.Hs.eg.db)
 #'
 #' # All KEGG pathways, minimum 5 genes

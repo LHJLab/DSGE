@@ -459,7 +459,17 @@ default_gene_id_col <- function(source) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' # Generate random p-values (simulating differential expression results)
+#' set.seed(42)
+#' pvals <- runif(1000)
+#' z <- calc_dsge(pvals)
+#' head(z)
+#'
+#' # With baseMean filtering
+#' base_mean <- rexp(1000)
+#' z <- calc_dsge(pvals, base_mean)
+#' head(z)
+#' \donttest{
 #' res <- DESeq2::results(dds)
 #' calc_dsge(res$pvalue, res$baseMean)
 #' }
@@ -596,7 +606,15 @@ calc_dsge <- function(pvalue, base_mean = NULL, base_mean_cutoff = 0.1) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' # Toy example with simulated data
+#' set.seed(42)
+#' pvals <- runif(500)
+#' base_mean <- rexp(500)
+#' gene_names <- paste0("gene", 1:500)
+#' forebrain_like <- paste0("gene", 1:30)
+#' dsge_perm_test(forebrain_like, pvals, base_mean, gene_names,
+#'                n_perm = 100, seed = 42, progress = FALSE)
+#' \donttest{
 #' res <- DESeq2::results(dds)
 #' dsge_perm_test(gene_list = forebrain_genes,
 #'                pvalue = res$pvalue, base_mean = res$baseMean,
@@ -942,7 +960,25 @@ dsge_perm_test <- function(gene_list, pvalue, base_mean, gene_names,
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
+#' # Toy example with simulated data
+#' set.seed(42)
+#' pvals <- runif(500)
+#' base_mean <- rexp(500)
+#' gene_names <- paste0("gene", 1:500)
+#' pw <- list(
+#'   pathway_A = data.frame(db_object_symbol = paste0("gene", 1:20),
+#'                          go_name = "Pathway A",
+#'                          stringsAsFactors = FALSE),
+#'   pathway_B = data.frame(db_object_symbol = paste0("gene", 21:40),
+#'                          go_name = "Pathway B",
+#'                          stringsAsFactors = FALSE)
+#' )
+#' result <- pathway_dsge(pw, pvals, base_mean, gene_names,
+#'                        min_size = 1, n_perm = 100, seed = 42)
+#' head(result)
+#'
+#' # Real-world usage with external data
 #' res <- DESeq2::results(dds)
 #' gaf <- read_gaf("goa_human.gaf")
 #' go  <- read_obo("go.obo")
@@ -1446,15 +1482,24 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' result <- pathway_dsge(pw, res$pvalue, res$baseMean, res$geneName,
-#'                        seed = 42, return_null = TRUE, heterogeneity = TRUE)
-#' # Top 9
-#' plot_dsge(result, n = 9)
-#' # Selected GO terms
-#' plot_dsge(result, go_ids = c("GO:0007156", "GO:0007268"))
-#' # Standardised scale
-#' plot_dsge(result, n = 9, use_std = TRUE)
+#' \donttest{
+#' # Build a result object with simulated data for demonstration
+#' set.seed(42)
+#' pvals <- runif(500)
+#' base_mean <- rexp(500)
+#' gene_names <- paste0("gene", 1:500)
+#' pw <- list(
+#'   pw1 = data.frame(db_object_symbol = paste0("gene", 1:30),
+#'                     go_name = "Pathway 1",
+#'                     stringsAsFactors = FALSE),
+#'   pw2 = data.frame(db_object_symbol = paste0("gene", 31:60),
+#'                     go_name = "Pathway 2",
+#'                     stringsAsFactors = FALSE)
+#' )
+#' result <- pathway_dsge(pw, pvals, base_mean, gene_names,
+#'                        min_size = 1, n_perm = 100, seed = 42,
+#'                        return_null = TRUE)
+#' plot_dsge(result, n = 2)
 #' }
 plot_dsge <- function(result, n = 9L,
                        pathway_ids   = NULL,
@@ -1764,23 +1809,27 @@ plot_dsge <- function(result, n = 9L,
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' res <- read.csv("deseq2_results.csv")
-#' gaf <- read_gaf("goa_human.gaf")
-#' go  <- read_obo("go.obo")
-#' pw  <- get_pathway_genes(gaf, go_names = go, min_size = 15)
-#' dsge <- pathway_dsge(pw, res$pvalue, res$baseMean, res$geneName, seed = 42)
-#'
-#' # T cell receptor complex, with DSGE stats
-#' plot_dsge_volcano(res, dsge, pw, go_id = "GO:0042101")
-#'
-#' # With effect size thresholds, only label significant genes
-#' plot_dsge_volcano(res, dsge, pw, go_id = "GO:0032720",
-#'   lfc_threshold = c(-1, 1), label_sig = TRUE)
-#'
-#' # Large pathway, only label specific genes
-#' plot_dsge_volcano(res, pw, go_id = "GO:0005737",
-#'   label_genes = c("TP53", "MYC", "EGFR"))
+#' \donttest{
+#' # Build input objects with simulated data for demonstration
+#' set.seed(42)
+#' de_results <- data.frame(
+#'   log2FoldChange = rnorm(100, mean = 0, sd = 1.5),
+#'   pvalue = runif(100),
+#'   geneName = paste0("GENE", 1:100),
+#'   stringsAsFactors = FALSE
+#' )
+#' pw <- list(
+#'   GO:0042101 = data.frame(
+#'     db_object_symbol = paste0("GENE", 1:15),
+#'     go_name = "T cell receptor complex",
+#'     stringsAsFactors = FALSE
+#'   )
+#' )
+#' dsge <- pathway_dsge(pw, de_results$pvalue, de_results$pvalue,
+#'                      de_results$geneName, min_size = 1, n_perm = 100,
+#'                      seed = 42)
+#' plot_dsge_volcano(de_results, dsge, pw, go_id = "GO:0042101",
+#'   logFC_col = "log2FoldChange", pval_col = "pvalue", gene_col = "geneName")
 #' }
 plot_dsge_volcano <- function(de_results,
                                dsge_result    = NULL,

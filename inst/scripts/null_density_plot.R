@@ -11,9 +11,19 @@
 #   source("inst/scripts/null_density_plot.R")
 #
 # 输出：
-#   results/plots/null_density_evolution.pdf  —— 双面板合并图（论文用）
-#   results/plots/null_density_ridge.pdf      —— 脊线图（可选）
+#   plots/null_density_curves.pdf  —— 密度曲线图
+#   plots/null_thresholds.pdf      —— 阈值图
+#   plots/null_density_ridge.pdf   —— 脊线图（可选）
 # =========================================================================
+
+# ---- 输出目录（使用 tempdir 避免写入用户工作目录）----
+out_dir <- file.path(tempdir(), "plots")
+dir.create(out_dir, showWarnings = FALSE)
+
+# ---- 保存用户图形参数（脚本结束时恢复）----
+old_par <- par(no.readonly = TRUE)
+on.exit(par(old_par))
+
 cat("Loading dependencies...\n")
 source("R/read_gaf.R")
 source("R/read_obo.R")
@@ -78,7 +88,6 @@ close(pb)
 cat("Done.\n")
 
 # ---- 3. 绘图 ----
-dir.create("results/plots", showWarnings = FALSE)
 
 # ========== 图 1：代表性大小的零分布密度曲线 ==========
 cols <- colorRampPalette(c("#56B4E9", "#0072B2", "#D55E00"))(length(SHOW_SIZES))
@@ -90,7 +99,7 @@ names(density_info) <- as.character(SHOW_SIZES)
 x_range <- range(sapply(density_info, function(d) range(d$x)))
 y_max   <- max(sapply(density_info, function(d) max(d$y)))
 
-pdf("results/plots/null_density_curves.pdf", width = 7, height = 6)
+pdf(file.path(out_dir, "null_density_curves.pdf"), width = 7, height = 6)
 par(mar = c(4.5, 4.5, 3, 1), mgp = c(2.8, 0.8, 0))
 
 first <- TRUE
@@ -119,10 +128,10 @@ legend("topright",
        col = cols, lwd = 2.2, cex = 0.75, bty = "n", inset = 0.02)
 
 dev.off()
-cat("Saved: results/plots/null_density_curves.pdf\n")
+cat(sprintf("Saved: %s/null_density_curves.pdf\n", out_dir))
 
 # ========== 图 2：峰值 & 显著性阈值 vs. 通路大小 ==========
-pdf("results/plots/null_thresholds.pdf", width = 7, height = 6)
+pdf(file.path(out_dir, "null_thresholds.pdf"), width = 7, height = 6)
 par(mar = c(4.5, 4.5, 3, 1), mgp = c(2.8, 0.8, 0))
 
 ylim <- range(c(thresholds_95, thresholds_99, peaks))
@@ -156,9 +165,9 @@ legend("topright",
        cex = 0.65, bty = "n", inset = 0.02)
 
 dev.off()
-cat("Saved: results/plots/null_thresholds.pdf\n")
+cat(sprintf("Saved: %s/null_thresholds.pdf\n", out_dir))
 
-# ---- 4. 统计摘要表（用于论文文字引用） ----
+# ---- 4. 统计摘要表（用于论文文字引用）----
 cat("\n")
 cat(paste(rep("=", 72), collapse = ""), "\n")
 cat("  NULL DISTRIBUTION SUMMARY  (based on real DESeq2 data)\n")
@@ -187,7 +196,7 @@ cat("\n")
 # ---- 5. 脊线图（可选） ----
 DO_RIDGE <- TRUE
 if (DO_RIDGE) {
-  pdf("results/plots/null_density_ridge.pdf", width = 10, height = 7)
+  pdf(file.path(out_dir, "null_density_ridge.pdf"), width = 10, height = 7)
 
   ridge_sizes <- c(5, 10, 15, 20, 30, 40, 50, 75, 100, 125, 150,
                    175, 200, 250, 300, 350, 400, 450, 500)
@@ -222,7 +231,7 @@ if (DO_RIDGE) {
   }
 
   dev.off()
-  cat("Saved: results/plots/null_density_ridge.pdf\n")
+  cat(sprintf("Saved: %s/null_density_ridge.pdf\n", out_dir))
 }
 
 cat("\nAll plots generated.\n")

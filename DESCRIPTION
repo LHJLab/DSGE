@@ -1,7 +1,6 @@
 Package: DSGEr
 Type: Package
-Title:  Disruption Score of Gene Expression -- a Statistical Framework
-        for Geneset-Level Transcriptional Perturbation Analysis
+Title: DSGEr: Transcriptional Disruption Score for Gene Sets
 Version: 1.3.0
 Authors@R: c(
     person(given = "Pingwei", family = "Guo",
@@ -10,7 +9,10 @@ Authors@R: c(
            email = "lihuijuan@xzhmu.edu.cn", role = "aut"))
 Description: Computes pathway-level transcriptional disruption scores
     from differential expression p-values using permutation tests with
-    GPD tail extrapolation and FDR correction.
+    Generalized Pareto Distribution (GPD) tail extrapolation and false
+    discovery rate (FDR) correction. Reference: Guo P, Li H (2026)
+    DSGEr: Disruption Score of Gene Expression for Gene-Set Enrichment
+    Analysis. <https://github.com/LHJLab/DSGE>.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true

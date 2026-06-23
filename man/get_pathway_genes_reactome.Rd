@@ -15,9 +15,9 @@ get_pathway_genes_reactome(
 )
 }
 \arguments{
-\item{orgdb}{An \code{OrgDb} object, e.g. \code{org.Hs.eg.db} for
-human, \code{org.Mm.eg.db} for mouse, or a similar object retrieved
-from \code{AnnotationHub}.}
+\item{orgdb}{An \code{OrgDb} object (e.g. \code{org.Hs.eg.db}) used
+to resolve Entrez IDs to gene symbols. Only human (R-HSA) pathways
+are included.}
 
 \item{keytype}{Key type used to query the \code{OrgDb}. Default
 \code{"ENTREZID"}. Must be one of the key types returned by
@@ -35,15 +35,16 @@ are discarded. Default \code{5}. Pass \code{NULL} to keep all.}
 \item{attach_path_names}{Logical. Whether to fetch pathway names via
 \code{reactome.db}. Default \code{TRUE}. When \code{reactome.db} is
 not installed, falls back to \code{NA} names.}
+
 \item{species_prefix}{Reactome species prefix for filtering pathways.
 Default \code{"R-HSA"} (Homo sapiens). Use \code{NULL} to keep all
 species.}
 }
 \value{
 A named list where each element is a \code{data.frame} with
-  columns \code{reactome_name} (if attached), \code{gene_id_col},
-  and \code{gene_symbol_col}. The list names are Reactome pathway IDs
-  (e.g. \code{"R-HSA-1234567"}). S3 class \code{"reactome_pathway"}
+  columns \code{reactome_name} (if attached), \code{gene_id_col}, and
+  \code{gene_symbol_col}. The list names are Reactome pathway IDs
+  (e.g. \code{"R-HSA-177929"}). S3 class \code{"reactome_pathway"}
   is set on list elements for source auto-detection by
   \code{\link{pathway_dsge}()}.
 }
@@ -62,18 +63,18 @@ the \code{reactome.db} Bioconductor package in a single batched query.
 Requires \code{reactome.db} and \code{AnnotationDbi}. Install
   with: \code{BiocManager::install(c("AnnotationDbi", "reactome.db"))}.
 }
-\seealso{
-\code{\link{get_pathway_genes_db}} for the GO-based equivalent.
-\code{\link{get_pathway_genes_kegg}} for the KEGG equivalent.
-}
 \examples{
-\dontrun{
+\donttest{
 library(org.Hs.eg.db)
 
-# All Reactome pathways, minimum 5 genes
+# All human Reactome pathways, minimum 5 genes
 pw <- get_pathway_genes_reactome(org.Hs.eg.db)
 
-# Without fetching pathway names (offline)
+# Without fetching pathway names
 pw <- get_pathway_genes_reactome(org.Hs.eg.db, attach_path_names = FALSE)
 }
+}
+\seealso{
+\code{\link{get_pathway_genes_db}} for the GO-based equivalent.
+  \code{\link{get_pathway_genes_kegg}} for the KEGG equivalent.
 }

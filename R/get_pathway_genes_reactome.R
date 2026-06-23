@@ -61,7 +61,7 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' library(org.Hs.eg.db)
 #'
 #' # All human Reactome pathways, minimum 5 genes

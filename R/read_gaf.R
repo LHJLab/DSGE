@@ -60,7 +60,16 @@ GAF_COLUMNS <- c(
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' # Create a temporary GAF file for demonstration
+#' gaf_file <- tempfile(fileext = ".gaf")
+#' writeLines(c(
+#'   "!gaf-version: 2.2",
+#'   "!generated-by: R example",
+#'   "UniProtKB\tP12345\tGENE_A\t\tGO:0003674\tPMID:123456\tIDA\t\tF\tGene A\t\tprotein\ttaxon:9606\t20240101\tGO\t\t",
+#'   "UniProtKB\tP67890\tGENE_B\t\tGO:0005575\tPMID:789012\tIBA\t\tC\tGene B\t\tprotein\ttaxon:9606\t20240101\tGO\t\t"
+#' ), gaf_file)
+#' get_gaf_header(gaf_file)
+#' \donttest{
 #' get_gaf_header("goa_human.gaf")
 #' }
 get_gaf_header <- function(file) {
@@ -95,7 +104,16 @@ get_gaf_header <- function(file) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' # Create a temporary GAF file for demonstration
+#' gaf_file <- tempfile(fileext = ".gaf")
+#' writeLines(c(
+#'   "!gaf-version: 2.2",
+#'   "UniProtKB\tP12345\tGENE_A\t\tGO:0003674\tPMID:123456\tIDA\t\tF\tGene A\t\tprotein\ttaxon:9606\t20240101\tGO\t\t",
+#'   "UniProtKB\tP67890\tGENE_B\t\tGO:0005575\tPMID:789012\tIBA\t\tC\tGene B\t\tprotein\ttaxon:9606\t20240101\tGO\t\t"
+#' ), gaf_file)
+#' gaf <- read_gaf(gaf_file)
+#' head(gaf)
+#' \donttest{
 #' gaf <- read_gaf("goa_human.gaf")
 #' head(gaf)
 #' }

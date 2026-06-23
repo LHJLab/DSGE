@@ -146,7 +146,12 @@ back to sequential with a message.}
 
 \item{p_adjust_method}{Multiple testing correction method. Passed to
 \code{stats::p.adjust()}. Default \code{"BY"} (Benjamini-Yekutieli)
-which controls FDR under arbitrary dependence.}
+which controls FDR under arbitrary dependence. Use \code{"BH"} for
+Benjamini-Hochberg (controls FDR under positive dependence).
+All methods supported by \code{p.adjust} are valid:
+\code{"holm"}, \code{"hochberg"}, \code{"hommel"},
+\code{"bonferroni"}, \code{"BH"}, \code{"BY"}, \code{"fdr"},
+\code{"none"}.}
 
 \item{nds_top_frac}{Fraction of most-perturbed genes retained for
 NDS calculation. Default \code{0.25} (top 25%). Only used when
@@ -162,6 +167,10 @@ By default, a \code{data.frame} sorted by \code{p_adj}
   }
   All sources include: \code{n_pathway}, \code{n_matched},
   \code{dsge}, \code{p_value}, \code{p_adj}.
+
+  For GO sources, \code{aspect} is the ontology classification:
+  \code{"BP"} (Biological Process), \code{"MF"} (Molecular Function),
+  \code{"CC"} (Cellular Component).
 
   When \code{heterogeneity = TRUE}, additionally includes:
   \code{gini}, \code{cv}, \code{het_p_value}, \code{het_p_adj}.
@@ -188,7 +197,7 @@ By default, a \code{data.frame} sorted by \code{p_adj}
         values are CV null distribution vectors}
 }
 \description{
-Computes DSGE for each pathway, generates permutation null
+Computes DSGE for each GO pathway, generates permutation null
 distributions grouped by number of matched genes, computes p-values
 using GPD tail extrapolation, and applies Benjamini-Hochberg FDR
 correction.
@@ -226,7 +235,25 @@ null distribution, greatly reducing computation.
 }
 }
 \examples{
-\dontrun{
+\donttest{
+# Toy example with simulated data
+set.seed(42)
+pvals <- runif(500)
+base_mean <- rexp(500)
+gene_names <- paste0("gene", 1:500)
+pw <- list(
+  pathway_A = data.frame(db_object_symbol = paste0("gene", 1:20),
+                         go_name = "Pathway A",
+                         stringsAsFactors = FALSE),
+  pathway_B = data.frame(db_object_symbol = paste0("gene", 21:40),
+                         go_name = "Pathway B",
+                         stringsAsFactors = FALSE)
+)
+result <- pathway_dsge(pw, pvals, base_mean, gene_names,
+                       min_size = 1, n_perm = 100, seed = 42)
+head(result)
+
+# Real-world usage with external data
 res <- DESeq2::results(dds)
 gaf <- read_gaf("goa_human.gaf")
 go  <- read_obo("go.obo")

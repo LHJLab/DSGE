@@ -65,11 +65,6 @@ classify genes as up-regulated (positive direction) or
 down-regulated (negative direction). Values of exactly 0 are
 treated as up-regulated. Ignored when \code{directional = FALSE}.}
 
-\item{nds_top_frac}{Fraction of most-perturbed genes retained for
-NDS calculation. Default \code{0.25} (top 25%). Only used when
-\code{directional = TRUE}. Lower values focus on the most extreme
-genes; higher values include more genes.}
-
 \item{use_std}{Whether to compute and use standardised DSGE.
 Default \code{TRUE}. When enabled:
 \itemize{
@@ -105,6 +100,11 @@ Other options: \code{"mple"}, \code{"moments"}, \code{"pwmu"},
 Default \code{1.6}. Larger values produce larger (more conservative)
 p-values for extremely extreme observations, avoiding double-precision
 underflow to zero at the cost of increased bias.}
+
+\item{nds_top_frac}{Fraction of most-perturbed genes retained for
+NDS calculation. Default \code{0.25} (top 25\%). Only used when
+\code{directional = TRUE}. Lower values focus on the most extreme
+genes; higher values include more genes.}
 }
 \value{
 A list with elements:
@@ -143,7 +143,15 @@ Algorithm steps:
 }
 }
 \examples{
-\dontrun{
+# Toy example with simulated data
+set.seed(42)
+pvals <- runif(500)
+base_mean <- rexp(500)
+gene_names <- paste0("gene", 1:500)
+forebrain_like <- paste0("gene", 1:30)
+dsge_perm_test(forebrain_like, pvals, base_mean, gene_names,
+               n_perm = 100, seed = 42, progress = FALSE)
+\donttest{
 res <- DESeq2::results(dds)
 dsge_perm_test(gene_list = forebrain_genes,
                pvalue = res$pvalue, base_mean = res$baseMean,

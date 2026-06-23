@@ -75,7 +75,7 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' library(org.Hs.eg.db)
 #'
 #' # All pathways, minimum 5 genes
