@@ -152,4 +152,3 @@ forebrain_like <- paste0("gene", 1:30)
 dsge_perm_test(forebrain_like, pvals, base_mean, gene_names,
                n_perm = 100, seed = 42, progress = FALSE)
 }
-}
