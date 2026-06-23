@@ -75,17 +75,9 @@
 #' @export
 #'
 #' @examples
-#' \donttest{
-#' library(org.Hs.eg.db)
-#'
-#' # All pathways, minimum 5 genes
-#' pw <- get_pathway_genes_db(org.Hs.eg.db)
-#'
-#' # Only Biological Process, experimental evidence
-#' pw <- get_pathway_genes_db(org.Hs.eg.db,
-#'                            aspect  = "BP",
-#'                            evidence = c("IDA", "IPI", "IMP", "IGI", "IEP"))
-#' }
+#' # See the function documentation for usage with an OrgDb object
+#' # (e.g. org.Hs.eg.db). The OrgDb package must be installed
+#' # separately from Bioconductor.
 get_pathway_genes_db <- function(orgdb,
                                   keytype          = "ENTREZID",
                                   gene_id_col      = "db_object_id",

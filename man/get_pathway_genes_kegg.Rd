@@ -68,15 +68,9 @@ Requires the \code{AnnotationDbi} package. The \code{KEGGREST}
   \code{BiocManager::install(c("AnnotationDbi", "KEGGREST"))}.
 }
 \examples{
-\donttest{
-library(org.Hs.eg.db)
-
-# All KEGG pathways, minimum 5 genes
-pw <- get_pathway_genes_kegg(org.Hs.eg.db)
-
-# Without fetching pathway names (offline)
-pw <- get_pathway_genes_kegg(org.Hs.eg.db, attach_path_names = FALSE)
-}
+# See the function documentation for usage with an OrgDb object
+# (e.g. org.Hs.eg.db). The OrgDb package must be installed
+# separately from Bioconductor.
 }
 \seealso{
 \code{\link{get_pathway_genes_db}} for the GO-based equivalent.

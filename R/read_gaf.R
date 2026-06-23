@@ -73,9 +73,6 @@ GAF_COLUMNS <- c(
 #'          "taxon:9606\t20240101\tGO\t\t")
 #' ), gaf_file)
 #' get_gaf_header(gaf_file)
-#' \donttest{
-#' get_gaf_header("goa_human.gaf")
-#' }
 get_gaf_header <- function(file) {
   # Comment headers are typically within the first 500 lines; no need
   # to read the entire file
@@ -121,10 +118,6 @@ get_gaf_header <- function(file) {
 #' ), gaf_file)
 #' gaf <- read_gaf(gaf_file)
 #' head(gaf)
-#' \donttest{
-#' gaf <- read_gaf("goa_human.gaf")
-#' head(gaf)
-#' }
 read_gaf <- function(file, col_names = GAF_COLUMNS, ...) {
   # ---- File existence check ----
   if (!file.exists(file)) {

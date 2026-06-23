@@ -38,8 +38,4 @@ writeLines(c(
 ), gaf_file)
 gaf <- read_gaf(gaf_file)
 head(gaf)
-\donttest{
-gaf <- read_gaf("goa_human.gaf")
-head(gaf)
-}
 }

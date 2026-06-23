@@ -61,15 +61,9 @@
 #' @export
 #'
 #' @examples
-#' \donttest{
-#' library(org.Hs.eg.db)
-#'
-#' # All human Reactome pathways, minimum 5 genes
-#' pw <- get_pathway_genes_reactome(org.Hs.eg.db)
-#'
-#' # Without fetching pathway names
-#' pw <- get_pathway_genes_reactome(org.Hs.eg.db, attach_path_names = FALSE)
-#' }
+#' # See the function documentation for usage with an OrgDb object
+#' # (e.g. org.Hs.eg.db). The reactome.db and OrgDb packages must be
+#' # installed separately from Bioconductor.
 get_pathway_genes_reactome <- function(orgdb,
                                         keytype           = "ENTREZID",
                                         gene_id_col       = "reactome_gene_id",

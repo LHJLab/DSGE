@@ -32,7 +32,4 @@ writeLines(c(
          "taxon:9606\t20240101\tGO\t\t")
 ), gaf_file)
 get_gaf_header(gaf_file)
-\donttest{
-get_gaf_header("goa_human.gaf")
-}
 }

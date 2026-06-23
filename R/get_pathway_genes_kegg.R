@@ -93,15 +93,9 @@ KEGG_ORG_CODES <- c(
 #' @export
 #'
 #' @examples
-#' \donttest{
-#' library(org.Hs.eg.db)
-#'
-#' # All KEGG pathways, minimum 5 genes
-#' pw <- get_pathway_genes_kegg(org.Hs.eg.db)
-#'
-#' # Without fetching pathway names (offline)
-#' pw <- get_pathway_genes_kegg(org.Hs.eg.db, attach_path_names = FALSE)
-#' }
+#' # See the function documentation for usage with an OrgDb object
+#' # (e.g. org.Hs.eg.db). The OrgDb package must be installed
+#' # separately from Bioconductor.
 get_pathway_genes_kegg <- function(orgdb,
                                     keytype           = "ENTREZID",
                                     gene_id_col       = "kegg_gene_id",

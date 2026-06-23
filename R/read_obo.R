@@ -67,10 +67,6 @@
 #' ), obo_file)
 #' go_names <- read_obo(obo_file)
 #' head(go_names)
-#' \donttest{
-#' go_names <- read_obo("go-basic.obo")
-#' head(go_names)
-#' }
 read_obo <- function(file) {
   # ---- Input validation ----
   if (!file.exists(file))
