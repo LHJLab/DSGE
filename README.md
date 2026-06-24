@@ -16,7 +16,7 @@ devtools::install_github("LHJLab/DSGE")
 ## Quick Start
 
 ```r
-library(DSGE)
+library(DSGEr)
 library(org.Hs.eg.db)
 
 # Build pathway-gene map from Bioconductor OrgDb
