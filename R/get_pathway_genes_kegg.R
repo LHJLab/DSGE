@@ -93,14 +93,12 @@ KEGG_ORG_CODES <- c(
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' library(org.Hs.eg.db)
-#'
-#' # All KEGG pathways, minimum 5 genes
-#' pw <- get_pathway_genes_kegg(org.Hs.eg.db)
-#'
-#' # Without fetching pathway names (offline)
-#' pw <- get_pathway_genes_kegg(org.Hs.eg.db, attach_path_names = FALSE)
+#' # Requires additional Bioconductor database packages
+#' \donttest{
+#' if (require("org.Hs.eg.db", quietly = TRUE)) {
+#'   pw <- get_pathway_genes_kegg(org.Hs.eg.db)
+#'   str(pw[1:2])
+#' }
 #' }
 get_pathway_genes_kegg <- function(orgdb,
                                     keytype           = "ENTREZID",

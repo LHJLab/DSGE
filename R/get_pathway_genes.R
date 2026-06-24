@@ -57,17 +57,52 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' gaf <- read_gaf("goa_human.gaf")
-#' go  <- read_obo("go.obo")
+#' # Create a minimal GAF data.frame for demonstration
+#' toy_gaf <- data.frame(
+#'   db_object_id    = c("1", "2", "3", "1", "2"),
+#'   db_object_symbol = c("GENE_A", "GENE_B", "GENE_C", "GENE_A", "GENE_D"),
+#'   go_id           = c("GO:0003674", "GO:0003674", "GO:0005575",
+#'                       "GO:0005575", "GO:0005575"),
+#'   aspect          = c("F", "F", "C", "C", "C"),
+#'   evidence_code   = c("IDA", "IBA", "IDA", "IDA", "IEA"),
+#'   stringsAsFactors = FALSE
+#' )
+#' pathway_genes <- get_pathway_genes(toy_gaf, min_size = 1)
+#' pathway_genes[["GO:0003674"]]
 #'
-#' # Get all pathways (with GO names, at least 5 genes)
-#' pathway_genes <- get_pathway_genes(gaf, go_names = go, min_size = 5)
-#' pathway_genes[["GO:0005515"]][1:5, ]
+#' # Create a temporary GAF file for demonstration
+#' gaf_file <- tempfile(fileext = ".gaf")
+#' writeLines(c(
+#'   "!gaf-version: 2.2",
+#'   paste0("UniProtKB\tP12345\tGENE_A\t\tGO:0003674\t",
+#'          "PMID:123456\tIDA\t\tF\tGene A\t\tprotein\t",
+#'          "taxon:9606\t20240101\tGO\t\t"),
+#'   paste0("UniProtKB\tP67890\tGENE_B\t\tGO:0005575\t",
+#'          "PMID:789012\tIBA\t\tC\tGene B\t\tprotein\t",
+#'          "taxon:9606\t20240101\tGO\t\t")
+#' ), gaf_file)
+#' gaf <- read_gaf(gaf_file)
 #'
-#' # Only experimentally validated biological process annotations
-#' pathway_genes <- get_pathway_genes(gaf, evidence = "IDA", aspect = "P")
-#' }
+#' # Create a temporary OBO file
+#' obo_file <- tempfile(fileext = ".obo")
+#' writeLines(c(
+#'   "format-version: 1.2",
+#'   "",
+#'   "[Term]",
+#'   "id: GO:0003674",
+#'   "name: molecular_function",
+#'   "namespace: molecular_function",
+#'   "",
+#'   "[Term]",
+#'   "id: GO:0005575",
+#'   "name: cellular_component",
+#'   "namespace: cellular_component"
+#' ), obo_file)
+#' go <- read_obo(obo_file)
+#'
+#' # Build pathway-gene mapping with GO names
+#' pathway_genes <- get_pathway_genes(gaf, go_names = go, min_size = 1)
+#' pathway_genes[["GO:0003674"]]
 get_pathway_genes <- function(gaf_data,
                                genes     = c("db_object_id", "db_object_symbol"),
                                unique    = TRUE,

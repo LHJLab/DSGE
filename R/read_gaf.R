@@ -60,9 +60,19 @@ GAF_COLUMNS <- c(
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' get_gaf_header("goa_human.gaf")
-#' }
+#' # Create a temporary GAF file for demonstration
+#' gaf_file <- tempfile(fileext = ".gaf")
+#' writeLines(c(
+#'   "!gaf-version: 2.2",
+#'   "!generated-by: R example",
+#'   paste0("UniProtKB\tP12345\tGENE_A\t\tGO:0003674\t",
+#'          "PMID:123456\tIDA\t\tF\tGene A\t\tprotein\t",
+#'          "taxon:9606\t20240101\tGO\t\t"),
+#'   paste0("UniProtKB\tP67890\tGENE_B\t\tGO:0005575\t",
+#'          "PMID:789012\tIBA\t\tC\tGene B\t\tprotein\t",
+#'          "taxon:9606\t20240101\tGO\t\t")
+#' ), gaf_file)
+#' get_gaf_header(gaf_file)
 get_gaf_header <- function(file) {
   # Comment headers are typically within the first 500 lines; no need
   # to read the entire file
@@ -95,10 +105,19 @@ get_gaf_header <- function(file) {
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' gaf <- read_gaf("goa_human.gaf")
+#' # Create a temporary GAF file for demonstration
+#' gaf_file <- tempfile(fileext = ".gaf")
+#' writeLines(c(
+#'   "!gaf-version: 2.2",
+#'   paste0("UniProtKB\tP12345\tGENE_A\t\tGO:0003674\t",
+#'          "PMID:123456\tIDA\t\tF\tGene A\t\tprotein\t",
+#'          "taxon:9606\t20240101\tGO\t\t"),
+#'   paste0("UniProtKB\tP67890\tGENE_B\t\tGO:0005575\t",
+#'          "PMID:789012\tIBA\t\tC\tGene B\t\tprotein\t",
+#'          "taxon:9606\t20240101\tGO\t\t")
+#' ), gaf_file)
+#' gaf <- read_gaf(gaf_file)
 #' head(gaf)
-#' }
 read_gaf <- function(file, col_names = GAF_COLUMNS, ...) {
   # ---- File existence check ----
   if (!file.exists(file)) {

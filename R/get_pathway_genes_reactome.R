@@ -61,14 +61,13 @@
 #' @export
 #'
 #' @examples
-#' \dontrun{
-#' library(org.Hs.eg.db)
-#'
-#' # All human Reactome pathways, minimum 5 genes
-#' pw <- get_pathway_genes_reactome(org.Hs.eg.db)
-#'
-#' # Without fetching pathway names
-#' pw <- get_pathway_genes_reactome(org.Hs.eg.db, attach_path_names = FALSE)
+#' # Requires additional Bioconductor database packages
+#' \donttest{
+#' if (require("org.Hs.eg.db", quietly = TRUE) &&
+#'     require("reactome.db", quietly = TRUE)) {
+#'   pw <- get_pathway_genes_reactome(org.Hs.eg.db)
+#'   str(pw[1:2])
+#' }
 #' }
 get_pathway_genes_reactome <- function(orgdb,
                                         keytype           = "ENTREZID",
