@@ -93,9 +93,12 @@ KEGG_ORG_CODES <- c(
 #' @export
 #'
 #' @examples
-#' # See the function documentation for usage with an OrgDb object
-#' # (e.g. org.Hs.eg.db). The OrgDb package must be installed
-#' # separately from Bioconductor.
+#' # Requires additional Bioconductor database packages
+#' \dontrun{
+#' library(org.Hs.eg.db)
+#' pw <- get_pathway_genes_kegg(org.Hs.eg.db)
+#' str(pw[1:2])
+#' }
 get_pathway_genes_kegg <- function(orgdb,
                                     keytype           = "ENTREZID",
                                     gene_id_col       = "kegg_gene_id",

@@ -64,9 +64,12 @@ Requires \code{reactome.db} and \code{AnnotationDbi}. Install
   with: \code{BiocManager::install(c("AnnotationDbi", "reactome.db"))}.
 }
 \examples{
-# See the function documentation for usage with an OrgDb object
-# (e.g. org.Hs.eg.db). The reactome.db and OrgDb packages must be
-# installed separately from Bioconductor.
+# Requires additional Bioconductor database packages
+\dontrun{
+library(org.Hs.eg.db)
+pw <- get_pathway_genes_reactome(org.Hs.eg.db)
+str(pw[1:2])
+}
 }
 \seealso{
 \code{\link{get_pathway_genes_db}} for the GO-based equivalent.

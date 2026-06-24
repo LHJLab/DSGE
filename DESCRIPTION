@@ -29,6 +29,7 @@ Suggests:
     GO.db
 Enhances:
     KEGGREST,
+    org.Hs.eg.db,
     reactome.db
 Config/roxygen2/version: 8.0.0
 RoxygenNote: 7.3.3
