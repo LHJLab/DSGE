@@ -9,16 +9,24 @@
 # all null distributions have mean ≈ 0, sd ≈ 1, making the observed
 # DSGE_std values directly comparable across different pathway sizes.
 #
-# 用法（在项目根目录运行）：
+# Usage (run from project root):
 #   source("inst/scripts/null_density_std_plot.R")
 #
-# 输出：
-#   results/plots/null_density_std_curves.pdf   —— 代表性大小的标准化零分布密度
-#   results/plots/null_std_thresholds.pdf       —— 标准化后的峰值 & 阈值 vs. 通路大小
-#   results/plots/null_density_std_ridge.pdf    —— 标准化脊线图（可选）
+# Output:
+#   plots/null_density_std_curves.pdf   —— standardised null density for representative sizes
+#   plots/null_std_thresholds.pdf       —— standardised peak & threshold vs. pathway size
+#   plots/null_density_std_ridge.pdf    —— standardised ridge plot (optional)
 # =========================================================================
 
-# ---- 0. 加载依赖 & 读取真实数据 ----
+# ---- Output directory (use tempdir to avoid writing to user workspace) ----
+out_dir <- file.path(tempdir(), "plots")
+dir.create(out_dir, showWarnings = FALSE)
+
+# ---- Save user graphical parameters (restore at script exit) ----
+old_par <- par(no.readonly = TRUE)
+on.exit(par(old_par))
+
+# ---- 0. Load dependencies & real data ----
 cat("Loading dependencies...\n")
 source("R/dsge.R")
 
@@ -26,7 +34,7 @@ cat("Loading limma results...\n")
 res <- read.csv("inst/data_exp/limma_FLT3_IR_vs_FLT3.csv", stringsAsFactors = FALSE)
 cat("  Genes:", nrow(res), "\n")
 
-# ---- 从真实 limma 结果构建 z 分数池 ----
+# ---- Build z-score pool from real limma results ----
 dsge_res <- calc_dsge(res$pvalue)
 pool_z  <- dsge_res$z_scores
 n_pool  <- length(pool_z)
@@ -34,13 +42,13 @@ n_pool  <- length(pool_z)
 cat(sprintf("Background gene pool: n=%d, mean(z)=%.4f, sd(z)=%.4f\n",
             n_pool, mean(pool_z), sd(pool_z)))
 
-# ---- 1. 参数 ----
+# ---- 1. Parameters ----
 set.seed(42)
-N_PERM     <- 100000L                          # 排列次数
-SIZES      <- seq(5, 500, by = 5)             # 通路大小序列
-SHOW_SIZES <- c(5, 10, 25, 50, 100, 200, 500) # 面板 A 展示的代表性大小
+N_PERM     <- 100000L                          # Number of permutations
+SIZES      <- seq(5, 500, by = 5)             # Pathway size sequence
+SHOW_SIZES <- c(5, 10, 25, 50, 100, 200, 500) # Representative sizes for Panel A
 
-# ---- 2. 批量生成零分布 → 标准化 ----
+# ---- 2. Batch generate null distributions -> standardise ----
 peaks_std         <- numeric(length(SIZES))
 medians_std       <- numeric(length(SIZES))
 thresholds_95_std <- numeric(length(SIZES))
@@ -85,10 +93,9 @@ for (i in seq_along(SIZES)) {
 close(pb)
 cat("Done.\n")
 
-# ---- 3. 绘图 ----
-dir.create("results/plots", showWarnings = FALSE)
+# ---- 3. Plotting ----
 
-# ========== 图 1：代表性大小的标准化零分布密度曲线 ==========
+# ========== Fig 1: Standardised null density curves for representative sizes ==========
 cols <- colorRampPalette(c("#56B4E9", "#0072B2", "#D55E00"))(length(SHOW_SIZES))
 
 density_std <- lapply(as.character(SHOW_SIZES), function(key) {
@@ -98,7 +105,7 @@ names(density_std) <- as.character(SHOW_SIZES)
 x_range <- range(sapply(density_std, function(d) range(d$x)))
 y_max   <- max(sapply(density_std, function(d) max(d$y)))
 
-pdf("results/plots/null_density_std_curves.pdf", width = 7, height = 6)
+pdf(file.path(out_dir, "null_density_std_curves.pdf"), width = 7, height = 6)
 par(mar = c(4.5, 4.5, 3, 1), mgp = c(2.8, 0.8, 0))
 
 first <- TRUE
@@ -130,10 +137,10 @@ legend("topright",
        col = cols, lwd = 2.2, cex = 0.75, bty = "n", inset = 0.02)
 
 dev.off()
-cat("Saved: results/plots/null_density_std_curves.pdf\n")
+cat(sprintf("Saved: %s/null_density_std_curves.pdf\n", out_dir))
 
-# ========== 图 2：标准化后的峰值 & 显著性阈值 vs. 通路大小 ==========
-pdf("results/plots/null_std_thresholds.pdf", width = 7, height = 6)
+# ========== Fig 2: Standardised peak & significance threshold vs. pathway size ==========
+pdf(file.path(out_dir, "null_std_thresholds.pdf"), width = 7, height = 6)
 par(mar = c(4.5, 4.5, 3, 1), mgp = c(2.8, 0.8, 0))
 
 ylim <- range(c(thresholds_95_std, thresholds_99_std, peaks_std))
@@ -166,9 +173,9 @@ legend("topright",
        cex = 0.65, bty = "n", inset = 0.02)
 
 dev.off()
-cat("Saved: results/plots/null_std_thresholds.pdf\n")
+cat(sprintf("Saved: %s/null_std_thresholds.pdf\n", out_dir))
 
-# ---- 4. 统计摘要（用于论文文字引用） ----
+# ---- 4. Summary statistics (for manuscript text references) ----
 cat("\n")
 cat(paste(rep("=", 72), collapse = ""), "\n")
 cat("  STANDARDISED NULL SUMMARY  (mean = 0, sd = 1)\n")
@@ -189,10 +196,10 @@ cat(sprintf("    99%% threshold   ≈ 2.326  (all sizes)\n"))
 cat(sprintf("  Pool mean(z)       = %.4f\n", mean(pool_z)))
 cat("\n")
 
-# ---- 5. 脊线图（可选）----
+# ---- 5. Ridge plot (optional) ----
 DO_RIDGE <- TRUE
 if (DO_RIDGE) {
-  pdf("results/plots/null_density_std_ridge.pdf", width = 10, height = 7)
+  pdf(file.path(out_dir, "null_density_std_ridge.pdf"), width = 10, height = 7)
 
   ridge_sizes <- c(5, 10, 15, 20, 30, 40, 50, 75, 100, 125, 150,
                    175, 200, 250, 300, 350, 400, 450, 500)
@@ -228,7 +235,7 @@ if (DO_RIDGE) {
   abline(v = 0, col = "#999999", lty = 2, lwd = 0.8)
 
   dev.off()
-  cat("Saved: results/plots/null_density_std_ridge.pdf\n")
+  cat(sprintf("Saved: %s/null_density_std_ridge.pdf\n", out_dir))
 }
 
 cat("\nAll plots generated.\n")
