@@ -65,11 +65,6 @@ classify genes as up-regulated (positive direction) or
 down-regulated (negative direction). Values of exactly 0 are
 treated as up-regulated. Ignored when \code{directional = FALSE}.}
 
-\item{nds_top_frac}{Fraction of most-perturbed genes retained for
-NDS calculation. Default \code{0.25} (top 25%). Only used when
-\code{directional = TRUE}. Lower values focus on the most extreme
-genes; higher values include more genes.}
-
 \item{use_std}{Whether to compute and use standardised DSGE.
 Default \code{TRUE}. When enabled:
 \itemize{
@@ -105,6 +100,11 @@ Other options: \code{"mple"}, \code{"moments"}, \code{"pwmu"},
 Default \code{1.6}. Larger values produce larger (more conservative)
 p-values for extremely extreme observations, avoiding double-precision
 underflow to zero at the cost of increased bias.}
+
+\item{nds_top_frac}{Fraction of most-perturbed genes retained for
+NDS calculation. Default \code{0.25} (top 25\%). Only used when
+\code{directional = TRUE}. Lower values focus on the most extreme
+genes; higher values include more genes.}
 }
 \value{
 A list with elements:
@@ -112,7 +112,7 @@ A list with elements:
   \item{n_genes}{number of target genes matched}
   \item{null}{permutation null distribution vector}
   \item{p_value}{right-tail p-value (GPD tail extrapolation when
-        observed falls above 90th percentile; empirical ECDF otherwise)}
+        observed falls above the `gpd_threshold` quantile (default 99th); empirical ECDF otherwise)}
   \item{ecdf}{empirical cumulative distribution function of the null}
   \item{dsge_std}{(only when \code{use_std = TRUE}) standardised DSGE}
   \item{nds}{(only when \code{directional = TRUE}) Normalized
@@ -143,14 +143,12 @@ Algorithm steps:
 }
 }
 \examples{
-\dontrun{
-res <- DESeq2::results(dds)
-dsge_perm_test(gene_list = forebrain_genes,
-               pvalue = res$pvalue, base_mean = res$baseMean,
-               gene_names = rownames(res), seed = 42)
-# Without standardised DSGE
-dsge_perm_test(gene_list = forebrain_genes,
-               pvalue = res$pvalue, base_mean = res$baseMean,
-               gene_names = rownames(res), seed = 42, use_std = FALSE)
-}
+# Toy example with simulated data
+set.seed(42)
+pvals <- runif(500)
+base_mean <- rexp(500)
+gene_names <- paste0("gene", 1:500)
+forebrain_like <- paste0("gene", 1:30)
+dsge_perm_test(forebrain_like, pvals, base_mean, gene_names,
+               n_perm = 100, seed = 42, progress = FALSE)
 }

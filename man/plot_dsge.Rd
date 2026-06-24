@@ -23,21 +23,16 @@ plot_dsge(
 \code{return_null = TRUE} (contains \code{table}, \code{null_raw},
 \code{null_gpd}).}
 
-\item{n}{When \code{pathway_ids = NULL} and \code{go_ids = NULL},
+\item{n}{When \code{pathway_ids} (or \code{go_ids}) is \code{NULL},
 the top \code{n} most significant pathways (by p_adj ascending) are
-plotted. Default 9. Ignored when \code{pathway_ids} or
-\code{go_ids} is specified.}
+plotted. Default 9. Ignored when \code{pathway_ids} is specified.}
 
 \item{pathway_ids}{Optional character vector of pathway IDs to plot
 (e.g. GO IDs, KEGG IDs, or Reactome IDs depending on source). When
 provided, directly plots these pathways, overriding \code{n}.
 Unmatched IDs are skipped with a warning.}
 
-\item{go_ids}{\strong{[Deprecated]}. Use \code{pathway_ids} instead.
-Optional character vector of GO term IDs to plot
-(e.g. \code{c("GO:0007156", "GO:0007268")}). When provided,
-directly plots these pathways, overriding \code{n}. Unmatched IDs
-are skipped with a warning.}
+\item{go_ids}{\strong{[Deprecated]}. Use \code{pathway_ids} instead.}
 
 \item{col_null}{Color of the null distribution density curve.
 Default \code{"#2166AC"}.}
@@ -71,14 +66,21 @@ marking the observed DSGE. If GPD tail fitting is available for the
 size group, the tail region is highlighted in semi-transparent orange.
 }
 \examples{
-\dontrun{
-result <- pathway_dsge(pw, res$pvalue, res$baseMean, res$geneName,
-                       seed = 42, return_null = TRUE, heterogeneity = TRUE)
-# Top 9
-plot_dsge(result, n = 9)
-# Selected pathways
-plot_dsge(result, pathway_ids = c("GO:0007156", "GO:0007268"))
-# Standardised scale
-plot_dsge(result, n = 9, use_std = TRUE)
-}
+# Build a result object with simulated data for demonstration
+set.seed(42)
+pvals <- runif(500)
+base_mean <- rexp(500)
+gene_names <- paste0("gene", 1:500)
+pw <- list(
+  pw1 = data.frame(db_object_symbol = paste0("gene", 1:30),
+                    go_name = "Pathway 1",
+                    stringsAsFactors = FALSE),
+  pw2 = data.frame(db_object_symbol = paste0("gene", 31:60),
+                    go_name = "Pathway 2",
+                    stringsAsFactors = FALSE)
+)
+result <- pathway_dsge(pw, pvals, base_mean, gene_names,
+                       min_size = 1, n_perm = 100, seed = 42,
+                       return_null = TRUE)
+plot_dsge(result, n = 2)
 }

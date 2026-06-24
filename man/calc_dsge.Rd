@@ -31,8 +31,14 @@ from differential expression analysis results. Higher DSGE indicates
 stronger global transcriptional perturbation.
 }
 \examples{
-\dontrun{
-res <- DESeq2::results(dds)
-calc_dsge(res$pvalue, res$baseMean)
-}
+# Generate random p-values (simulating differential expression results)
+set.seed(42)
+pvals <- runif(1000)
+z <- calc_dsge(pvals)
+head(z)
+
+# With baseMean filtering
+base_mean <- rexp(1000)
+z <- calc_dsge(pvals, base_mean)
+head(z)
 }

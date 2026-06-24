@@ -83,16 +83,12 @@ This function requires the \code{AnnotationDbi} package. The
   \code{BiocManager::install(c("AnnotationDbi", "GO.db"))}.
 }
 \examples{
-\dontrun{
-library(org.Hs.eg.db)
-
-# All pathways, minimum 5 genes
-pw <- get_pathway_genes_db(org.Hs.eg.db)
-
-# Only Biological Process, experimental evidence
-pw <- get_pathway_genes_db(org.Hs.eg.db,
-                           aspect  = "BP",
-                           evidence = c("IDA", "IPI", "IMP", "IGI", "IEP"))
+# Requires additional Bioconductor database packages
+\donttest{
+if (require("org.Hs.eg.db", quietly = TRUE)) {
+  pw <- get_pathway_genes_db(org.Hs.eg.db)
+  str(pw[1:2])
+}
 }
 }
 \seealso{
