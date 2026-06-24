@@ -84,10 +84,11 @@ This function requires the \code{AnnotationDbi} package. The
 }
 \examples{
 # Requires additional Bioconductor database packages
-\dontrun{
-library(org.Hs.eg.db)
-pw <- get_pathway_genes_db(org.Hs.eg.db)
-str(pw[1:2])
+\donttest{
+if (require("org.Hs.eg.db", quietly = TRUE)) {
+  pw <- get_pathway_genes_db(org.Hs.eg.db)
+  str(pw[1:2])
+}
 }
 }
 \seealso{
