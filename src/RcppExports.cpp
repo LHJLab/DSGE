@@ -12,7 +12,7 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 
 // permute_null_cpp
 List permute_null_cpp(NumericVector pool_z, int sz, int n_perm, int seed, bool compute_gini, bool compute_cv);
-RcppExport SEXP _DSGE_permute_null_cpp(SEXP pool_zSEXP, SEXP szSEXP, SEXP n_permSEXP, SEXP seedSEXP, SEXP compute_giniSEXP, SEXP compute_cvSEXP) {
+RcppExport SEXP _DSGEr_permute_null_cpp(SEXP pool_zSEXP, SEXP szSEXP, SEXP n_permSEXP, SEXP seedSEXP, SEXP compute_giniSEXP, SEXP compute_cvSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -28,11 +28,11 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_DSGE_permute_null_cpp", (DL_FUNC) &_DSGE_permute_null_cpp, 6},
+    {"_DSGEr_permute_null_cpp", (DL_FUNC) &_DSGEr_permute_null_cpp, 6},
     {NULL, NULL, 0}
 };
 
-RcppExport void R_init_DSGE(DllInfo *dll) {
+RcppExport void R_init_DSGEr(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }

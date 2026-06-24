@@ -2,6 +2,6 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 permute_null_cpp <- function(pool_z, sz, n_perm, seed, compute_gini = FALSE, compute_cv = FALSE) {
-    .Call(`_DSGE_permute_null_cpp`, pool_z, sz, n_perm, seed, compute_gini, compute_cv)
+    .Call(`_DSGEr_permute_null_cpp`, pool_z, sz, n_perm, seed, compute_gini, compute_cv)
 }
 
