@@ -26,10 +26,6 @@
 # Dependencies:
 #   evd  - pgpd(): survival function of the Generalized Pareto Distribution
 #   POT  - fitgpd(): fit GPD to the tail of the null distribution
-#
-# References:
-#   Coles, S. (2001). An Introduction to Statistical Modeling of
-#     Extreme Values. Springer.
 # =========================================================================
 
 # ---- Internal helper: p-values to absolute z-scores ----
@@ -1451,7 +1447,6 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
 #' @export
 #'
 #' @examples
-#' \donttest{
 #' # Build a result object with simulated data for demonstration
 #' set.seed(42)
 #' pvals <- runif(500)
@@ -1469,7 +1464,6 @@ pathway_dsge <- function(pathway_genes, pvalue, base_mean = NULL, gene_names,
 #'                        min_size = 1, n_perm = 100, seed = 42,
 #'                        return_null = TRUE)
 #' plot_dsge(result, n = 2)
-#' }
 plot_dsge <- function(result, n = 9L,
                        pathway_ids   = NULL,
                        go_ids        = NULL,
@@ -1778,7 +1772,6 @@ plot_dsge <- function(result, n = 9L,
 #' @export
 #'
 #' @examples
-#' \donttest{
 #' # Build input objects with simulated data for demonstration
 #' set.seed(42)
 #' de_results <- data.frame(
@@ -1799,7 +1792,6 @@ plot_dsge <- function(result, n = 9L,
 #'                      seed = 42)
 #' plot_dsge_volcano(de_results, dsge, pw, go_id = "GO:0042101",
 #'   logFC_col = "log2FoldChange", pval_col = "pvalue", gene_col = "geneName")
-#' }
 plot_dsge_volcano <- function(de_results,
                                dsge_result    = NULL,
                                pathway_genes,

@@ -141,7 +141,6 @@ p-value) on the y-axis. This allows visual inspection of the direction,
 magnitude, and distribution of perturbation within a single pathway.
 }
 \examples{
-\donttest{
 # Build input objects with simulated data for demonstration
 set.seed(42)
 de_results <- data.frame(
@@ -162,5 +161,4 @@ dsge <- pathway_dsge(pw, de_results$pvalue, de_results$pvalue,
                      seed = 42)
 plot_dsge_volcano(de_results, dsge, pw, go_id = "GO:0042101",
   logFC_col = "log2FoldChange", pval_col = "pvalue", gene_col = "geneName")
-}
 }

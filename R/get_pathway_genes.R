@@ -69,7 +69,7 @@
 #' )
 #' pathway_genes <- get_pathway_genes(toy_gaf, min_size = 1)
 #' pathway_genes[["GO:0003674"]]
-#' \donttest{
+#'
 #' # Create a temporary GAF file for demonstration
 #' gaf_file <- tempfile(fileext = ".gaf")
 #' writeLines(c(
@@ -103,7 +103,6 @@
 #' # Build pathway-gene mapping with GO names
 #' pathway_genes <- get_pathway_genes(gaf, go_names = go, min_size = 1)
 #' pathway_genes[["GO:0003674"]]
-#' }
 get_pathway_genes <- function(gaf_data,
                                genes     = c("db_object_id", "db_object_symbol"),
                                unique    = TRUE,

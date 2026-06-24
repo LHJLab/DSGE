@@ -66,7 +66,6 @@ marking the observed DSGE. If GPD tail fitting is available for the
 size group, the tail region is highlighted in semi-transparent orange.
 }
 \examples{
-\donttest{
 # Build a result object with simulated data for demonstration
 set.seed(42)
 pvals <- runif(500)
@@ -84,5 +83,4 @@ result <- pathway_dsge(pw, pvals, base_mean, gene_names,
                        min_size = 1, n_perm = 100, seed = 42,
                        return_null = TRUE)
 plot_dsge(result, n = 2)
-}
 }
